@@ -494,7 +494,10 @@ notifications:
     poll_interval_seconds: 2.0
 
 database:
-  path: "data/monik.db"
+  # База вынесена за пределы каталога состояния: переход на следующую
+  # версию не должен затрагивать историю. Каталог создаётся один раз и
+  # принадлежит пользователю службы.
+  path: "/var/lib/monik/monik.db"
   wal_enabled: true
   busy_timeout_seconds: 5.0
   integrity_check_on_startup: true
