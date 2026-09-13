@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "monik"
-version = "3.4.0"
+version = "3.5.0"
 description = "DEX arbitrage scanner"
 requires-python = ">=3.12"
 readme = "README.md"
