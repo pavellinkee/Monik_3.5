@@ -8,11 +8,14 @@
 from monik.services.registries.capabilities import CapabilityRegistry
 from monik.services.registries.networks import NetworkRegistry
 from monik.services.registries.providers import ProviderRegistry
+from monik.services.registries.token_check import TokenAddressCheck, TokenCheckResult
 from monik.services.registries.tokens import TokenRegistry
 
 __all__ = [
     "CapabilityRegistry",
     "NetworkRegistry",
     "ProviderRegistry",
+    "TokenAddressCheck",
+    "TokenCheckResult",
     "TokenRegistry",
 ]

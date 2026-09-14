@@ -48,6 +48,7 @@ from monik.services.notifications import StartupSummary
 from monik.services.observability import MetricsRegistry
 from monik.services.observability.clock import Clock
 from monik.services.observability.logging import get_logger, log_fields
+from monik.services.registries import TokenAddressCheck
 from monik.services.scheduler import (
     ExecutionOutcome,
     Scheduler,
@@ -59,6 +60,7 @@ from monik.services.updates import AptPendingUpdates, UpdateWatcher
 
 __all__ = [
     "TASK_CAPABILITY_LOAD",
+    "TASK_TOKEN_CHECK",
     "TASK_LEVEL1_SCAN",
     "TASK_NOTIFICATIONS",
     "TASK_BACKUP",
@@ -77,6 +79,7 @@ TASK_LEVEL1_SCAN = "level1_scan"
 TASK_NOTIFICATIONS = "notification_delivery"
 TASK_TELEGRAM_COMMANDS = "telegram_commands"
 TASK_CAPABILITY_LOAD = "capability_load"
+TASK_TOKEN_CHECK = "token_check"
 TASK_SYSTEM_HEALTH = "system_health_notifications"
 TASK_BACKUP = "backup"
 TASK_SYSTEM_UPDATES = "system_updates"
@@ -91,6 +94,10 @@ _DEFAULT_SCHEDULES: dict[str, TaskScheduleConfig] = {
     TASK_NOTIFICATIONS: TaskScheduleConfig(mode=TaskMode.INTERVAL, interval_seconds=10),
     TASK_TELEGRAM_COMMANDS: TaskScheduleConfig(mode=TaskMode.INTERVAL, interval_seconds=5),
     TASK_CAPABILITY_LOAD: TaskScheduleConfig(mode=TaskMode.STARTUP),
+    # Сверка адресов токенов: разовая, при старте. Опечатка в адресе
+    # выглядит в работе как отсутствие ликвидности, и заметить её иначе
+    # можно только вручную.
+    TASK_TOKEN_CHECK: TaskScheduleConfig(mode=TaskMode.STARTUP),
     TASK_SYSTEM_HEALTH: TaskScheduleConfig(mode=TaskMode.INTERVAL, interval_seconds=60),
     # Резервная копия по умолчанию: суббота, 03:00. Ночь выходного дня —
     # время наименьшей нагрузки; конкретный день и час задаются
@@ -356,6 +363,13 @@ def build_application(
         default=_DEFAULT_SCHEDULES[TASK_CAPABILITY_LOAD],
     )
     registry.register(
+        TASK_TOKEN_CHECK,
+        _token_check_task(container),
+        config=config.scheduler,
+        default=_DEFAULT_SCHEDULES[TASK_TOKEN_CHECK],
+        priority=RequestPriority.MAINTENANCE,
+    )
+    registry.register(
         TASK_LEVEL1_SCAN,
         _level1_task(container),
         config=config.scheduler,
@@ -445,6 +459,25 @@ async def create_application(
         loaded, database=database, clock=clock, metrics=metrics, adapters=adapters
     )
     return application, database
+
+
+def _token_check_task(container: Container) -> TaskHandler:
+    """Сверка настроенных адресов токенов со списками провайдеров.
+
+    Выполняется один раз при старте и стоит одного запроса на провайдера,
+    который умеет отдавать список целиком. Ничего не выключает: расхождение
+    только показывается, решение остаётся за оператором.
+    """
+    check = TokenAddressCheck(
+        adapters=container.adapters,
+        tokens=container.tokens,
+        networks=container.networks,
+    )
+
+    async def run() -> None:
+        await check.run()
+
+    return run
 
 
 def _capability_task(container: Container) -> TaskHandler:

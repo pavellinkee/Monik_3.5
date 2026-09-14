@@ -28,7 +28,7 @@ from monik.domain.errors import (
 )
 from monik.domain.models.resource import ResourceKey, ResourceRequest
 from monik.domain.value_objects.identifiers import CorrelationId, RequestId
-from monik.domain.value_objects.identity import NetworkId
+from monik.domain.value_objects.identity import NetworkId, TokenAddress
 from monik.infrastructure.http import HttpClient, HttpRequest, HttpResponse, classify_response
 from monik.services.observability.clock import Clock
 from monik.services.observability.redaction import REDACTED, redact_text
@@ -79,6 +79,16 @@ class HttpProviderAdapter:
         await self._http.aclose()
 
     # --- выполнение запросов ---------------------------------------------
+
+    async def known_tokens(self, network_id: NetworkId) -> frozenset[TokenAddress] | None:
+        """Список признаваемых токенов; по умолчанию его нет.
+
+        Возвращать пустое множество вместо ``None`` нельзя: это означало
+        бы, что провайдер не знает ни одного токена, и любая проверка
+        конфигурации сочла бы все адреса ошибочными. Провайдер, у которого
+        такой endpoint есть, переопределяет метод.
+        """
+        return None
 
     def auth_headers(self) -> dict[str, str]:
         """Заголовки аутентификации.

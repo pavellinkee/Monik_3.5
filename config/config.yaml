@@ -201,7 +201,7 @@ tokens:
     rank: 11
 
   - network_id: polygon
-    address: "0x3D5320821BFCA19fB0B5428F2c79D63bd5246f89"
+    address: "0x172370d5Cd63279eFa6d502DAB29171933a610AF"
     symbol: CRV
     decimals: 18
     rank: 12
@@ -213,13 +213,13 @@ tokens:
     rank: 13
 
   - network_id: polygon
-    address: "0x03b54A6e9a984069379fa1eA4fc4dbae93b3bccd"
+    address: "0x03b54A6e9a984069379fae1a4fC4dBAE93B3bCCD"
     symbol: wstETH
     decimals: 18
     rank: 14
 
   - network_id: polygon
-    address: "0xbbaA073c31bf03b8acf7c28ef0738decf3695683"
+    address: "0xBbba073C31bF03b8ACf7c28EF0738DeCF3695683"
     symbol: SAND
     decimals: 18
     rank: 15
@@ -295,12 +295,6 @@ tokens:
     symbol: TEL
     decimals: 2
     rank: 27
-
-  - network_id: polygon
-    address: "0x4805D538c9fc01a3EB4e99E6c4066F0D9fA7Bd64"
-    symbol: PEPE
-    decimals: 18
-    rank: 28
 
   - network_id: polygon
     address: "0x3a58a54c066fdc0f2d55fc9c89f0415c92ebf3c4"

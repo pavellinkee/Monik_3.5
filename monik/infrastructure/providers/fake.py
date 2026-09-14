@@ -16,7 +16,7 @@ from monik.domain.enums.providers import ProviderId
 from monik.domain.errors import MonikError
 from monik.domain.models.fee import Fee
 from monik.domain.models.quote import Quote
-from monik.domain.value_objects.identity import NetworkId
+from monik.domain.value_objects.identity import NetworkId, TokenAddress
 from monik.infrastructure.providers.contract import (
     AdapterCapabilities,
     AdapterHealth,
@@ -136,6 +136,15 @@ class FakeAdapter:
         которому нужны комиссии, задаёт их явно.
         """
         return self._fees if self._fees is not None else ()
+
+    async def known_tokens(self, network_id: NetworkId) -> frozenset[TokenAddress] | None:
+        """Списка токенов у тестового адаптера нет.
+
+        ``None`` означает «сообщить не могу»: пустое множество выглядело
+        бы как «не знаю ни одного токена» и сделало бы любую сверку
+        адресов ложно отрицательной.
+        """
+        return None
 
     async def health_check(self) -> AdapterHealth:
         """Вернуть заданное состояние."""
