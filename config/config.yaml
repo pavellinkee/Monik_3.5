@@ -337,7 +337,7 @@ scanner:
     # Сумма поиска. Level 1 работает одной суммой: остальные Level 2
     # подставляет в уже найденную возможность.
     amount: "50"
-    interval_seconds: 300         # production interval — 5 минут
+    interval_seconds: 600         # production interval — 10 минут
     overlap_policy: skip
     scan_timeout_seconds: 240
     top_tokens: 30
