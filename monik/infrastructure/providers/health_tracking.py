@@ -29,7 +29,7 @@ from monik.domain.errors import MonikError
 from monik.domain.errors.classification import is_availability_failure
 from monik.domain.models.fee import Fee
 from monik.domain.models.quote import Quote
-from monik.domain.value_objects.identity import NetworkId, TokenAddress
+from monik.domain.value_objects.identity import NetworkId
 from monik.infrastructure.providers.contract import (
     AdapterCapabilities,
     AdapterHealth,
@@ -97,15 +97,6 @@ class HealthTrackingAdapter:
     async def discover_fees(self, network_id: NetworkId) -> tuple[Fee, ...]:
         """Получить raw информацию о комиссиях."""
         return await self._observe(lambda: self._adapter.discover_fees(network_id))
-
-    async def known_tokens(self, network_id: NetworkId) -> frozenset[TokenAddress] | None:
-        """Адреса токенов, признаваемых провайдером.
-
-        Наблюдение записывается, как для обычного обращения: это
-        настоящий запрос к API, и его исход говорит о доступности
-        провайдера так же, как исход котировки.
-        """
-        return await self._observe(lambda: self._adapter.known_tokens(network_id))
 
     async def health_check(self) -> AdapterHealth:
         """Проверить доступность API.

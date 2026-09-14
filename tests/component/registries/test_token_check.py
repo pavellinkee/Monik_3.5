@@ -1,20 +1,24 @@
-"""Сверка адресов токенов со списками провайдеров.
+"""Сверка адресов токенов с сетью.
 
 Опечатка в адресе ведёт себя как отсутствие ликвидности: агрегаторы
 отвечают «нет маршрута», память отказов отключает комбинацию, и токен
 молча выпадает из поиска. Четыре таких адреса прожили в конфигурации
 незамеченными, пока их не нашли ручной сверкой.
+
+Источник проверки — сама сеть. Списки токенов агрегаторов для этого не
+годятся: они кураторские, и сверка по ним объявила ошибочными десять
+токенов, которыми провайдер спокойно торгует.
 """
 
 from __future__ import annotations
 
 from monik.config import parse_configuration
-from monik.domain.enums.providers import ProviderId
 from monik.domain.errors import ProviderError
 from monik.domain.value_objects.identity import NetworkId, TokenAddress
 from monik.services.registries import (
     NetworkRegistry,
     TokenAddressCheck,
+    TokenMetadata,
     TokenRegistry,
 )
 from tests.component.level1.conftest import level1_document
@@ -22,84 +26,173 @@ from tests.unit.config.conftest import AAVE_ADDRESS, USDT_ADDRESS, VALID_ENV
 
 POLYGON = NetworkId("polygon")
 
-
-class _ListingAdapter:
-    """Провайдер, публикующий список признаваемых токенов."""
-
-    def __init__(self, addresses: tuple[str, ...]) -> None:
-        self._addresses = addresses
-        self.calls = 0
-
-    async def known_tokens(self, network_id: NetworkId) -> frozenset[TokenAddress] | None:
-        self.calls += 1
-        return frozenset(TokenAddress(address) for address in self._addresses)
+#: Ответы сети, совпадающие с конфигурацией: от них тест и отклоняется.
+_MATCHING = {
+    USDT_ADDRESS.lower(): TokenMetadata(decimals=6, symbol="USDT"),
+    AAVE_ADDRESS.lower(): TokenMetadata(decimals=18, symbol="AAVE"),
+}
 
 
-class _SilentAdapter:
-    """Провайдер без такого endpoint'а."""
+class _Chain:
+    """Узел сети с заданными ответами."""
 
-    async def known_tokens(self, network_id: NetworkId) -> frozenset[TokenAddress] | None:
-        return None
+    def __init__(
+        self,
+        answers: dict[str, TokenMetadata | None] | None = None,
+        *,
+        supported: bool = True,
+        error: Exception | None = None,
+    ) -> None:
+        self._answers = answers or {}
+        self._supported = supported
+        self._error = error
+        self.asked: list[str] = []
+
+    def supports(self, network_id: NetworkId) -> bool:
+        return self._supported
+
+    async def metadata(
+        self, network_id: NetworkId, address: TokenAddress
+    ) -> TokenMetadata | None:
+        self.asked.append(str(address).lower())
+        if self._error is not None:
+            raise self._error
+        return self._answers.get(str(address).lower(), _MATCHING[str(address).lower()])
 
 
-class _BrokenAdapter:
-    """Провайдер, у которого список недоступен."""
-
-    async def known_tokens(self, network_id: NetworkId) -> frozenset[TokenAddress] | None:
-        raise ProviderError("token list unavailable", code="provider_unavailable")
-
-
-def _check(**adapters: object) -> TokenAddressCheck:
+def _check(chain: _Chain) -> TokenAddressCheck:
     configuration = parse_configuration(level1_document(), environ=dict(VALID_ENV)).config
     return TokenAddressCheck(
-        adapters={ProviderId(name): adapter for name, adapter in adapters.items()},  # type: ignore[misc]
+        metadata=chain,  # type: ignore[arg-type]
         tokens=TokenRegistry(configuration),
         networks=NetworkRegistry(configuration),
     )
 
 
-class TestRecognition:
-    async def test_unknown_address_is_named(self) -> None:
-        """Адрес, которого не знает ни один провайдер, попадает в отчёт."""
-        check = _check(velora=_ListingAdapter((USDT_ADDRESS,)))
+class TestMismatch:
+    async def test_address_without_a_contract_is_reported(self) -> None:
+        """Ровно так выглядела опечатка в адресе: контракта нет."""
+        chain = _Chain({AAVE_ADDRESS.lower(): None})
 
-        result = await check.check(POLYGON)
+        result = await _check(chain).check(POLYGON)
 
-        assert [token.symbol for token in result.unrecognised] == ["AAVE"]
-        assert result.conclusive
+        assert [item.token.symbol for item in result.mismatches] == ["AAVE"]
+        assert "нет контракта" in result.mismatches[0].reason
 
-    async def test_case_of_the_address_does_not_matter(self) -> None:
-        """Регистр записи адреса его не различает."""
-        check = _check(velora=_ListingAdapter((USDT_ADDRESS.lower(), AAVE_ADDRESS.upper())))
+    async def test_wrong_decimals_are_reported(self) -> None:
+        """Ошибка в числе знаков искажает все суммы, поэтому сверяется строго."""
+        chain = _Chain({AAVE_ADDRESS.lower(): TokenMetadata(decimals=6, symbol="AAVE")})
 
-        assert (await check.check(POLYGON)).unrecognised == ()
+        result = await _check(chain).check(POLYGON)
 
-    async def test_one_provider_is_enough_to_recognise(self) -> None:
-        """Токен считается известным, если его знает хотя бы один."""
-        check = _check(
-            velora=_ListingAdapter((USDT_ADDRESS,)),
-            zero_x=_ListingAdapter((AAVE_ADDRESS,)),
-        )
+        assert [item.token.symbol for item in result.mismatches] == ["AAVE"]
+        assert "число знаков" in result.mismatches[0].reason
 
-        assert (await check.check(POLYGON)).unrecognised == ()
+    async def test_wrong_symbol_is_reported_but_not_critical(self) -> None:
+        """Символ — вопрос отображения: идентичность задаёт адрес.
+
+        USDT на Polygon отвечает символом ``USDT0`` после переименования
+        Tether, оставаясь тем же контрактом. Поднимать на это
+        предупреждение при каждом запуске значит приучить его не читать.
+        """
+        chain = _Chain({AAVE_ADDRESS.lower(): TokenMetadata(decimals=18, symbol="WBTC")})
+
+        result = await _check(chain).check(POLYGON)
+
+        assert "символ контракта WBTC" in result.mismatches[0].reason
+        assert not result.mismatches[0].critical
+
+    async def test_missing_contract_is_critical(self) -> None:
+        chain = _Chain({AAVE_ADDRESS.lower(): None})
+
+        result = await _check(chain).check(POLYGON)
+
+        assert result.mismatches[0].critical
+
+    async def test_matching_token_is_silent(self) -> None:
+        chain = _Chain({AAVE_ADDRESS.lower(): TokenMetadata(decimals=18, symbol="AAVE")})
+
+        result = await _check(chain).check(POLYGON)
+
+        assert result.mismatches == ()
+        assert result.checked > 0
+
+    async def test_symbol_case_does_not_matter(self) -> None:
+        chain = _Chain({AAVE_ADDRESS.lower(): TokenMetadata(decimals=18, symbol="aave")})
+
+        assert (await _check(chain).check(POLYGON)).mismatches == ()
+
+    async def test_missing_symbol_is_not_a_mismatch(self) -> None:
+        """Часть контрактов символ не отдаёт: это не повод их подозревать."""
+        chain = _Chain({AAVE_ADDRESS.lower(): TokenMetadata(decimals=18, symbol=None)})
+
+        assert (await _check(chain).check(POLYGON)).mismatches == ()
 
 
 class TestInconclusive:
-    """Молчание провайдеров не превращается в обвинение конфигурации."""
+    """Неизвестное не превращается в обвинение конфигурации."""
 
-    async def test_without_any_list_nothing_is_reported(self) -> None:
-        check = _check(velora=_SilentAdapter())
+    async def test_network_without_rpc_is_not_checked(self) -> None:
+        chain = _Chain(supported=False)
 
-        result = await check.check(POLYGON)
+        result = await _check(chain).check(POLYGON)
 
-        assert result.unrecognised == ()
-        assert not result.conclusive
+        assert result.mismatches == ()
+        assert result.checked == 0
+        assert result.unverified
+        assert chain.asked == []
 
-    async def test_failed_request_does_not_break_the_check(self) -> None:
-        """Сбой одного провайдера не срывает проверку и не роняет старт."""
-        check = _check(velora=_BrokenAdapter(), zero_x=_ListingAdapter((USDT_ADDRESS,)))
+    async def test_network_failure_does_not_accuse_the_configuration(self) -> None:
+        chain = _Chain(error=ProviderError("rpc unavailable", code="provider_unavailable"))
 
-        result = await check.check(POLYGON)
+        result = await _check(chain).check(POLYGON)
 
-        assert [token.symbol for token in result.unrecognised] == ["AAVE"]
-        assert result.answered == (ProviderId.ZERO_X,)
+        assert result.mismatches == ()
+        assert len(result.unverified) == result.checked + len(result.unverified)
+
+
+class TestParsing:
+    """Разбор ответов узла: контракты отвечают по-разному."""
+
+    def test_symbol_as_a_string(self) -> None:
+        from monik.services.registries.onchain import _parse_symbol
+
+        # Стандартный ответ: смещение, длина, данные.
+        payload = (
+            "0x"
+            + "20".rjust(64, "0")
+            + "4".rjust(64, "0")
+            + b"AAVE".hex().ljust(64, "0")
+        )
+        assert _parse_symbol(payload) == "AAVE"
+
+    def test_symbol_as_bytes32(self) -> None:
+        """Часть старых контрактов отдаёт символ как ``bytes32``."""
+        from monik.services.registries.onchain import _parse_symbol
+
+        assert _parse_symbol("0x" + b"MKR".hex().ljust(64, "0")) == "MKR"
+
+    def test_unreadable_symbol_is_not_an_error(self) -> None:
+        from monik.services.registries.onchain import _parse_symbol
+
+        assert _parse_symbol("0x") is None
+        assert _parse_symbol(None) is None
+
+    def test_decimals_are_parsed(self) -> None:
+        from monik.services.registries.onchain import _parse_decimals
+
+        assert _parse_decimals("0x" + "6".rjust(64, "0")) == 6
+        assert _parse_decimals("0x" + "12".rjust(64, "0")) == 18
+
+    def test_empty_answer_means_no_contract(self) -> None:
+        """Пустой ответ ``eth_call`` — это отсутствие контракта."""
+        from monik.services.registries.onchain import _parse_decimals
+
+        assert _parse_decimals("0x") is None
+        assert _parse_decimals(None) is None
+
+    def test_absurd_decimals_are_rejected(self) -> None:
+        """Ответ не от ERC-20 не должен выглядеть как число знаков."""
+        from monik.services.registries.onchain import _parse_decimals
+
+        assert _parse_decimals("0x" + "f" * 64) is None

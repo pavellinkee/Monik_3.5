@@ -31,7 +31,7 @@ from monik.domain.models.token import Token
 from monik.domain.value_objects.amounts import TokenAmount
 from monik.domain.value_objects.fingerprints import RouteFingerprint
 from monik.domain.value_objects.identifiers import CorrelationId, RequestId
-from monik.domain.value_objects.identity import NetworkId, TokenAddress
+from monik.domain.value_objects.identity import NetworkId
 
 __all__ = [
     "AdapterCapabilities",
@@ -201,20 +201,6 @@ class AggregatorAdapter(Protocol):
 
         Неизвестная комиссия возвращается со статусом ``UNKNOWN``, а не
         нулём (``06_AGGREGATOR_ADAPTERS.md`` §40).
-        """
-        ...
-
-    async def known_tokens(self, network_id: NetworkId) -> frozenset[TokenAddress] | None:
-        """Адреса токенов, которые провайдер признаёт в этой сети.
-
-        ``None`` означает «провайдер не умеет об этом сообщать» и не
-        является отрицательным ответом: отсутствие списка нельзя
-        трактовать как отсутствие токена (``CLAUDE.md`` §12).
-
-        Нужно для разовой проверки конфигурации: опечатка в адресе
-        контракта выглядит в работе как «нет маршрута», и без такого
-        списка отличить её от честного отсутствия ликвидности можно
-        только вручную.
         """
         ...
 

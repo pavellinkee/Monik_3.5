@@ -2,139 +2,168 @@
 
 Опечатка в адресе контракта ведёт себя незаметно: агрегаторы отвечают
 «нет маршрута», память отказов отключает комбинацию, и токен молча
-выпадает из поиска. Внешне это не отличается от честного отсутствия
+выпадает из поиска. Внешне это неотличимо от честного отсутствия
 ликвидности, поэтому четыре неверных адреса прожили в конфигурации
-незамеченными и обнаружились только ручной сверкой.
+незамеченными и нашлись только ручной сверкой.
 
-Проверка спрашивает у провайдеров, какие адреса они признают, и называет
-те, которых не признал **ни один**. Понятие общее: провайдер сообщает
-список, если умеет, и логика не знает, кто из них умеет, а кто нет.
+Источник истины — сама сеть, а не списки агрегаторов. Списки кураторские
+и неполные: сверка по ним объявила ошибочными десять токенов, которыми
+провайдер спокойно торгует. Контракт же либо отвечает на стандартные
+вызовы ERC-20, либо нет, и его ответ ни от чьих подборок не зависит.
 
-Проверка ничего не выключает и не исправляет. Отсутствие токена в списке
-провайдера — не доказательство ошибки: список может быть неполным, а сам
-токен рабочим. Решение принимает оператор, а Monik лишь показывает
-расхождение.
+Проверка ничего не выключает и не исправляет: она только показывает
+расхождение. Решение принимает оператор.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from monik.domain.enums.providers import ProviderId
 from monik.domain.errors import MonikError
 from monik.domain.models.token import Token
-from monik.domain.value_objects.identity import NetworkId, TokenAddress
-from monik.infrastructure.providers.contract import AggregatorAdapter
+from monik.domain.value_objects.identity import NetworkId
 from monik.services.observability.logging import get_logger, log_fields
 from monik.services.registries.networks import NetworkRegistry
+from monik.services.registries.onchain import OnchainTokenMetadata
 from monik.services.registries.tokens import TokenRegistry
 
-__all__ = ["TokenAddressCheck", "TokenCheckResult"]
+__all__ = ["TokenAddressCheck", "TokenCheckResult", "TokenMismatch"]
 
 _LOGGER = get_logger("services.registries.token_check")
 
 
 @dataclass(frozen=True, slots=True)
+class TokenMismatch:
+    """Расхождение между настройкой и тем, что отвечает сеть.
+
+    ``critical`` отделяет ошибку от косметики. Отсутствие контракта и
+    неверное число знаков делают токен непригодным: суммы считаются не по
+    тому активу или не в том масштабе. Разошедшийся символ — вопрос
+    отображения: идентичность токена задаёт адрес, а не имя
+    (``36_DATA_MODELS.md`` §10). Например, USDT на Polygon отвечает
+    символом ``USDT0`` после переименования Tether, оставаясь тем же
+    контрактом.
+    """
+
+    token: Token
+    reason: str
+    critical: bool = True
+
+    def describe(self) -> str:
+        """Строка для журнала."""
+        return f"{self.token.symbol}:{self.token.address} — {self.reason}"
+
+
+@dataclass(frozen=True, slots=True)
 class TokenCheckResult:
-    """Итог сверки адресов с тем, что признают провайдеры."""
+    """Итог сверки адресов одной сети."""
 
-    #: Токены, которых не признал ни один ответивший провайдер.
-    unrecognised: tuple[Token, ...] = ()
-    #: Провайдеры, приславшие список. Пустой набор означает, что сверять
-    #: было не с чем и молчание о токенах ничего не доказывает.
-    answered: tuple[ProviderId, ...] = ()
-
-    @property
-    def conclusive(self) -> bool:
-        """Был ли хоть один источник, с которым можно сверяться."""
-        return bool(self.answered)
+    network_id: NetworkId
+    checked: int = 0
+    mismatches: tuple[TokenMismatch, ...] = ()
+    #: Токены, о которых узел ничего не сказал из-за сбоя связи. Это не
+    #: обвинение конфигурации: неизвестное не равно ошибочному.
+    unverified: tuple[Token, ...] = ()
 
 
 @dataclass
 class TokenAddressCheck:
-    """Сверяет настроенные адреса токенов со списками провайдеров."""
+    """Сверяет настроенные адреса с тем, что отвечает сеть."""
 
-    adapters: dict[ProviderId, AggregatorAdapter]
+    metadata: OnchainTokenMetadata
     tokens: TokenRegistry
     networks: NetworkRegistry
-    _checked: set[str] = field(default_factory=set)
+    _reported: set[str] = field(default_factory=set)
 
     async def run(self) -> tuple[TokenCheckResult, ...]:
         """Проверить включённые сети и сообщить о расхождениях."""
-        results = []
-        for network in self.networks.enabled():
-            results.append(await self.check(network.network_id))
-        return tuple(results)
+        return tuple([await self.check(network.network_id) for network in self.networks.enabled()])
 
     async def check(self, network_id: NetworkId) -> TokenCheckResult:
         """Сверить адреса одной сети."""
-        known: set[str] = set()
-        answered: list[ProviderId] = []
-        for provider_id, adapter in sorted(self.adapters.items(), key=lambda item: item[0].value):
-            addresses = await self._ask(provider_id, adapter, network_id)
-            if addresses is None:
-                continue
-            answered.append(provider_id)
-            known.update(_normalized(address) for address in addresses)
-
         configured = list(self.tokens.list_enabled(network_id))
-        # Если списка не прислал никто, сверять не с чем. Молчание нельзя
-        # превращать в обвинение конфигурации: иначе «никто не ответил»
-        # выглядело бы как «все адреса ошибочны».
-        unrecognised = (
-            tuple(token for token in configured if _normalized(token.address) not in known)
-            if answered
-            else ()
-        )
-        result = TokenCheckResult(unrecognised=unrecognised, answered=tuple(answered))
-        self._report(network_id, configured, result)
-        return result
-
-    async def _ask(
-        self, provider_id: ProviderId, adapter: AggregatorAdapter, network_id: NetworkId
-    ) -> frozenset[TokenAddress] | None:
-        """Спросить один список, не позволяя сбою сорвать проверку."""
-        try:
-            return await adapter.known_tokens(network_id)
-        except MonikError as error:
+        if not self.metadata.supports(network_id):
             _LOGGER.info(
-                "token list unavailable",
-                extra=log_fields(provider=provider_id.value, error_code=error.info.code),
-            )
-            return None
-
-    def _report(
-        self, network_id: NetworkId, configured: list[Token], result: TokenCheckResult
-    ) -> None:
-        """Записать итог проверки: расхождения важнее тишины."""
-        if not result.conclusive:
-            _LOGGER.info(
-                "token addresses were not verified: no provider published a list",
+                "token addresses were not verified: network has no rpc endpoint",
                 extra=log_fields(network=str(network_id), tokens=len(configured)),
             )
-            return
-        if not result.unrecognised:
+            return TokenCheckResult(network_id=network_id, unverified=tuple(configured))
+
+        mismatches: list[TokenMismatch] = []
+        unverified: list[Token] = []
+        for token in configured:
+            mismatch = await self._verify(network_id, token, unverified)
+            if mismatch is not None:
+                mismatches.append(mismatch)
+        result = TokenCheckResult(
+            network_id=network_id,
+            checked=len(configured) - len(unverified),
+            mismatches=tuple(mismatches),
+            unverified=tuple(unverified),
+        )
+        self._report(result)
+        return result
+
+    async def _verify(
+        self, network_id: NetworkId, token: Token, unverified: list[Token]
+    ) -> TokenMismatch | None:
+        """Сверить один токен, не позволяя сбою сорвать проверку."""
+        try:
+            found = await self.metadata.metadata(network_id, token.address)
+        except MonikError as error:
+            unverified.append(token)
             _LOGGER.info(
-                "token addresses verified",
+                "token address could not be verified",
+                extra=log_fields(token=str(token.address), error_code=error.info.code),
+            )
+            return None
+        if found is None:
+            return TokenMismatch(token=token, reason="по адресу нет контракта ERC-20")
+        if found.decimals != token.decimals:
+            return TokenMismatch(
+                token=token,
+                reason=f"число знаков {found.decimals}, в настройке {token.decimals}",
+            )
+        if found.symbol and found.symbol.upper() != str(token.symbol).upper():
+            return TokenMismatch(
+                token=token,
+                reason=f"символ контракта {found.symbol}, в настройке {token.symbol}",
+                critical=False,
+            )
+        return None
+
+    def _report(self, result: TokenCheckResult) -> None:
+        """Записать итог: расхождения важнее тишины.
+
+        Предупреждение поднимается только на то, что делает токен
+        непригодным. Иначе постоянное предупреждение о переименованном
+        символе приучило бы не читать предупреждения вовсе.
+        """
+        critical = [item for item in result.mismatches if item.critical]
+        cosmetic = [item for item in result.mismatches if not item.critical]
+        if cosmetic:
+            _LOGGER.info(
+                "token symbols differ from the chain",
                 extra=log_fields(
-                    network=str(network_id),
-                    tokens=len(configured),
-                    providers=len(result.answered),
+                    network=str(result.network_id),
+                    tokens="; ".join(item.describe() for item in cosmetic),
+                ),
+            )
+        if critical:
+            _LOGGER.warning(
+                "configured token addresses do not match the chain",
+                extra=log_fields(
+                    network=str(result.network_id),
+                    checked=result.checked,
+                    tokens="; ".join(item.describe() for item in critical),
                 ),
             )
             return
-        _LOGGER.warning(
-            "configured tokens are not recognised by any provider",
+        _LOGGER.info(
+            "token addresses verified against the chain",
             extra=log_fields(
-                network=str(network_id),
-                tokens=", ".join(
-                    f"{token.symbol}:{token.address}" for token in result.unrecognised
-                ),
-                providers=len(result.answered),
+                network=str(result.network_id),
+                checked=result.checked,
+                unverified=len(result.unverified),
             ),
         )
-
-
-def _normalized(address: TokenAddress) -> str:
-    """Адрес в едином виде: регистр записи адреса не различает."""
-    return str(address).lower()

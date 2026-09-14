@@ -26,7 +26,7 @@ from monik.domain.models.fee import Fee
 from monik.domain.models.quote import Quote
 from monik.domain.models.route import Route, RouteStep
 from monik.domain.value_objects.identifiers import RequestId
-from monik.domain.value_objects.identity import NetworkId, TokenAddress
+from monik.domain.value_objects.identity import NetworkId
 from monik.infrastructure.http import HttpClient, HttpResponse
 from monik.infrastructure.providers.contract import (
     AdapterCapabilities,
@@ -186,36 +186,6 @@ class VeloraAdapter(HttpProviderAdapter):
                 deduplication_key=f"velora:tokens:{network}",
             )
         return self._capabilities
-
-    async def known_tokens(self, network_id: NetworkId) -> frozenset[TokenAddress] | None:
-        """Адреса токенов сети по списку Market API.
-
-        Market API отдаёт весь список одним запросом, поэтому проверка
-        конфигурации обходится одним обращением, а не запросом на каждый
-        токен. Ответ, который не удалось разобрать, даёт ``None``, а не
-        пустой список: «не смогли узнать» не равно «токенов нет».
-        """
-        network = endpoints.network_id_for(network_id)
-        if network is None:
-            return None
-        payload = await self.request_json(
-            path=endpoints.tokens_path(network),
-            network_id=network_id,
-            operation=CapabilityOperation.TOKEN_METADATA,
-            request_id=RequestId.generate(),
-            deduplication_key=f"velora:tokens:{network}",
-        )
-        if not isinstance(payload, dict):
-            return None
-        tokens = payload.get("tokens")
-        if not isinstance(tokens, list):
-            return None
-        addresses = {
-            TokenAddress(item["address"])
-            for item in tokens
-            if isinstance(item, dict) and isinstance(item.get("address"), str)
-        }
-        return frozenset(addresses) or None
 
     async def discover_fees(self, network_id: NetworkId) -> tuple[Fee, ...]:
         """Отдельного endpoint'а комиссий нет.

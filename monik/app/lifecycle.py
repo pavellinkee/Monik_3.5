@@ -48,7 +48,6 @@ from monik.services.notifications import StartupSummary
 from monik.services.observability import MetricsRegistry
 from monik.services.observability.clock import Clock
 from monik.services.observability.logging import get_logger, log_fields
-from monik.services.registries import TokenAddressCheck
 from monik.services.scheduler import (
     ExecutionOutcome,
     Scheduler,
@@ -468,14 +467,10 @@ def _token_check_task(container: Container) -> TaskHandler:
     который умеет отдавать список целиком. Ничего не выключает: расхождение
     только показывается, решение остаётся за оператором.
     """
-    check = TokenAddressCheck(
-        adapters=container.adapters,
-        tokens=container.tokens,
-        networks=container.networks,
-    )
-
     async def run() -> None:
-        await check.run()
+        if container.token_check is None:
+            return
+        await container.token_check.run()
 
     return run
 

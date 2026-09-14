@@ -112,7 +112,9 @@ from monik.services.prices.providers import (
 from monik.services.registries import (
     CapabilityRegistry,
     NetworkRegistry,
+    OnchainTokenMetadata,
     ProviderRegistry,
+    TokenAddressCheck,
     TokenRegistry,
 )
 from monik.services.resources import ResourceLimits, ResourceManager
@@ -185,6 +187,8 @@ class Container:
     #: Установка системных обновлений по команде оператора. ``None``
     #: означает, что приложение её не выполняет.
     updater: SystemUpdater | None = None
+    #: Сверка адресов токенов с сетью. Выполняется один раз при старте.
+    token_check: TokenAddressCheck | None = None
 
     async def aclose(self) -> None:
         """Освободить внешние ресурсы."""
@@ -356,6 +360,22 @@ def build_container(
         config.database, database=database, clock=clock, state=repositories.metadata
     )
     updater = AptSystemUpdater()
+    token_check = TokenAddressCheck(
+        metadata=OnchainTokenMetadata(
+            http=http_client(),
+            resources=resources,
+            clock=clock,
+            # Узел сети — тот же, что отвечает за цену газа: второго
+            # источника для одной сети не заводится.
+            rpc_urls={
+                str(network.network_id): url
+                for network in networks.enabled()
+                if (url := networks.rpc_url(network.network_id)) is not None
+            },
+        ),
+        tokens=tokens,
+        networks=networks,
+    )
     commands = _build_commands(
         loaded,
         repositories=repositories,
@@ -405,6 +425,7 @@ def build_container(
         control=control,
         backups=backups,
         updater=updater,
+        token_check=token_check,
     )
 
 
