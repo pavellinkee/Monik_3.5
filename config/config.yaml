@@ -42,9 +42,9 @@ providers:
   - provider_id: zero_x
     emoji: "🔫"
     ui_url: "https://matcha.xyz"
-    # Отключён 13.09: исчерпан лимит запросов бесплатного плана, API
-    # отвечает 403. Возврат — по решению оператора, одной строкой.
-    enabled: false
+    # Включён обратно 14.09 по решению оператора. 13.09 API отвечал 403:
+    # исчерпан лимит запросов бесплатного плана.
+    enabled: true
     # Покупка и продажа у этого агрегатора. Разрешение двухуровневое:
     # глобальное routes.allow_same_provider плюс согласие провайдера.
     allow_same_provider_round_trip: true
@@ -336,7 +336,7 @@ scanner:
     # Сумма поиска. Level 1 работает одной суммой: остальные Level 2
     # подставляет в уже найденную возможность.
     amount: "50"
-    interval_seconds: 600         # production interval — 10 минут
+    interval_seconds: 300         # production interval — 5 минут
     overlap_policy: skip
     scan_timeout_seconds: 240
     top_tokens: 30
