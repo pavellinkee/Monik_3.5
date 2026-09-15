@@ -44,7 +44,7 @@ networks:
     # не означает одинаковый контракт (01_PROJECT_REQUIREMENTS.md §11).
     base_token_address: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9"
     rpc_url: "https://arbitrum-one-rpc.publicnode.com"
-    emoji: "🔷"
+    emoji: "🪀"
     enabled: true
 
 # Провайдер включается только вместе с заданной переменной окружения
