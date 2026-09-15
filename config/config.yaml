@@ -82,7 +82,9 @@ providers:
     supported_networks: [polygon]
 
   - provider_id: velora
-    enabled: true
+    # Выключен по решению оператора 15.09: в работе остаётся только
+    # Uniswap. Возврат — одной строкой.
+    enabled: false
     emoji: "👾"
     ui_url: "https://app.velora.xyz"
     # Покупка и продажа у этого агрегатора. Разрешение двухуровневое:
@@ -114,7 +116,9 @@ providers:
     supported_networks: [polygon]
 
   - provider_id: kyberswap
-    enabled: true
+    # Выключен по решению оператора 15.09: в работе остаётся только
+    # Uniswap. Возврат — одной строкой.
+    enabled: false
     emoji: "🖲️"
     ui_url: "https://kyberswap.com/swap/"
     # Покупка и продажа у этого агрегатора. Разрешение двухуровневое:
@@ -355,7 +359,7 @@ scanner:
   # Суммы задаются только конфигурацией (01_PROJECT_REQUIREMENTS.md §22).
   # Суммы, которыми Level 2 проверяет найденную возможность. Их число
   # произвольно и на стоимость поиска не влияет.
-  amounts: ["50", "100", "1000", "2000"]
+  amounts: ["50", "100", "300", "500"]
 
   level1:
     enabled: true
