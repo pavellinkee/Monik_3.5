@@ -143,9 +143,7 @@ providers:
       arbitrum: "https://kyberswap.com/swap/arbitrum"
 
   - provider_id: uniswap
-    # Выключен по решению оператора 15.09: в работе остаётся только
-    # KyberSwap. Возврат — одной строкой.
-    enabled: false
+    enabled: true
     emoji: "🧩"
     ui_url: "https://app.uniswap.org/swap"
     # Покупка и продажа у этого агрегатора. Разрешение двухуровневое:
@@ -181,6 +179,9 @@ tokens:
     decimals: 6
     usd_stable: true
     rank: 2
+    # Выключен по решению оператора 15.09: круг между стейблкоинами
+    # из поиска убран.
+    enabled: false
 
   - network_id: polygon
     address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"
@@ -189,6 +190,9 @@ tokens:
     rank: 3
     # Мостовой USDC на Polygon — такой же долларовый стейблкоин, как USDC.
     usd_stable: true
+    # Выключен по решению оператора 15.09: круг между стейблкоинами
+    # из поиска убран.
+    enabled: false
 
   - network_id: polygon
     address: "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619"
@@ -214,6 +218,9 @@ tokens:
     decimals: 18
     usd_stable: true
     rank: 7
+    # Выключен по решению оператора 15.09: круг между стейблкоинами
+    # из поиска убран.
+    enabled: false
 
   - network_id: polygon
     address: "0xD6DF932A45C0f255f85145f286eA0b292B21C90B"
@@ -302,6 +309,9 @@ tokens:
     decimals: 6
     usd_stable: true
     rank: 2
+    # Выключен по решению оператора 15.09: круг между стейблкоинами
+    # из поиска убран.
+    enabled: false
 
   - network_id: arbitrum
     # Мостовой USDC. Контракт в сети отвечает символом USDC — это
@@ -311,6 +321,9 @@ tokens:
     decimals: 6
     usd_stable: true
     rank: 3
+    # Выключен по решению оператора 15.09: круг между стейблкоинами
+    # из поиска убран.
+    enabled: false
 
   - network_id: arbitrum
     address: "0xDA10009cBd5D07dd0CeCc66161FC93D7c9000da1"
@@ -318,6 +331,9 @@ tokens:
     decimals: 18
     usd_stable: true
     rank: 4
+    # Выключен по решению оператора 15.09: круг между стейблкоинами
+    # из поиска убран.
+    enabled: false
 
   - network_id: arbitrum
     address: "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1"
@@ -366,9 +382,12 @@ scanner:
     # Сумма поиска. Level 1 работает одной суммой: остальные Level 2
     # подставляет в уже найденную возможность.
     amount: "50"
-    interval_seconds: 600         # production interval — 10 минут
+    # Интервал поиска. Таймаут цикла обязан в него укладываться,
+    # иначе циклы накладывались бы по построению, поэтому он
+    # снижен вместе с интервалом.
+    interval_seconds: 30
     overlap_policy: skip
-    scan_timeout_seconds: 240
+    scan_timeout_seconds: 25
     top_tokens: 30
     max_opportunities_per_scan: 50
     max_concurrent_requests: 8
@@ -377,8 +396,10 @@ scanner:
     # 0,0013 % против 0,065 % у WETH, поэтому прибыльно любое заметное
     # отклонение от паритета — но живёт оно минуты. Набор определяется
     # меткой usd_stable, а не списком имён.
+    # Отдельный частый проход по стейблкоинам выключен: обычный цикл
+    # идёт с тем же интервалом, и второй проход стал лишним.
     stable_scan:
-      enabled: true
+      enabled: false
       interval_seconds: 30
     # Срок, в течение которого возможность можно проверять. Поднят до
     # десяти минут, чтобы проверка пережила ручную остановку сканера: при
@@ -402,14 +423,14 @@ scanner:
 profitability:
   threshold_metric: net_roi
   # Порог подтверждения Level 2: возможность должна остаться выгодной на
-  # свежих данных. Сравнение >=, ровно 0.05 % проходит.
-  final_threshold_percent: "0.05"
+  # свежих данных. Сравнение >=, ровно 0.1 % проходит.
+  final_threshold_percent: "0.1"
   # Порог поиска Level 1: ниже него возможность не создаётся.
-  preliminary_threshold_percent: "0.05"
-  # Отдельный порог для круга между стабильными токенами: его стоимость
-  # 0,0013 % против 0,065 % у WETH, и общий порог отсекал бы ровно те
-  # отклонения от паритета, ради которых стабильные пары опрашиваются
-  # каждые 30 секунд. Применяется на обоих уровнях.
+  preliminary_threshold_percent: "0.1"
+  # Отдельный порог для круга между стабильными токенами. Сейчас не
+  # действует: все стабильные промежуточные токены выключены, и пар,
+  # к которым он применялся бы, в наборе не осталось. Настройка
+  # сохранена — она понадобится, когда стейблкоины вернутся.
   stable_threshold_percent: "0.01"
 
 fees:
