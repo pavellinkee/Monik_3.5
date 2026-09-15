@@ -57,6 +57,13 @@ def configuration_diagnostics(loaded: LoadedConfiguration) -> dict[str, Any]:
             "preliminary_threshold_percent": str(
                 config.profitability.preliminary_threshold_percent
             ),
+            # Порог стабильных пар показывается отдельно: иначе по записи
+            # запуска нельзя понять, какой планкой судится частый проход.
+            "stable_threshold_percent": (
+                None
+                if config.profitability.stable_threshold_percent is None
+                else str(config.profitability.stable_threshold_percent)
+            ),
         },
         "scheduler": {
             "enabled": config.scheduler.enabled,
