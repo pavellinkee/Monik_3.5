@@ -101,10 +101,17 @@ class StartupSummary:
     kind: StartupKind
     version: str
     environment: str
-    network: str
+    #: Сканируемые сети. Их может быть несколько: круг замыкается
+    #: внутри сети, но сетей в работе столько, сколько включил оператор.
+    networks: tuple[str, ...]
     providers: tuple[str, ...]
     health: ApplicationHealth
     recovered: int = 0
+
+
+def _network_label(networks: tuple[str, ...]) -> str:
+    """Заголовок строки сетей: одна сеть — «Сеть», несколько — «Сети»."""
+    return "Сеть" if len(networks) == 1 else "Сети"
 
 
 def severity_for_provider(status: str) -> SystemAlertSeverity:
@@ -143,7 +150,8 @@ def startup_text(summary: StartupSummary) -> str:
         f"{_MARKERS[severity]} {headline}",
         f"Версия: {summary.version}",
         f"Окружение: {summary.environment}",
-        f"Сеть: {summary.network}",
+        f"{_network_label(summary.networks)}: "
+        f"{', '.join(summary.networks) if summary.networks else 'не настроены'}",
         f"Провайдеры: {', '.join(summary.providers) if summary.providers else 'не настроены'}",
     ]
     lines.extend(_component_lines(summary.health))

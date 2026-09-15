@@ -83,6 +83,13 @@ class ProviderConfig(ConfigSection):
     #: Страница агрегатора, на которой оператор подключает кошелёк и
     #: совершает обмен. В уведомлении подставляется вместо названия.
     ui_url: str | None = Field(default=None, max_length=512)
+    #: Страница обмена для конкретной сети, когда она у агрегатора своя.
+    #:
+    #: Переходник: у одних агрегаторов сеть выбирается на самой странице,
+    #: у других зашита в адрес (``kyberswap.com/swap/arbitrum``). Общий
+    #: формат уведомления об этом различии не знает — он спрашивает
+    #: ссылку для сети и получает либо частную, либо общую.
+    ui_urls: dict[NetworkId, str] = Field(default_factory=dict)
     #: Часы работы провайдера. Вне окна Level 1 его не опрашивает.
     #:
     #: Нужно там, где у провайдера своя дневная квота: расход ограничивают
@@ -105,6 +112,14 @@ class ProviderConfig(ConfigSection):
             raise ValueError("provider base_url must use https")
         if self.ui_url is not None and not self.ui_url.startswith("https://"):
             raise ValueError("provider ui_url must use https")
+        for network_id, url in self.ui_urls.items():
+            if not url.startswith("https://"):
+                raise ValueError(f"provider ui_url for network {network_id} must use https")
+            if network_id not in self.supported_networks:
+                raise ValueError(
+                    f"provider {self.provider_id.value} declares a ui_url for network "
+                    f"{network_id} which it does not support"
+                )
         if self.enabled and not self.supported_networks:
             raise ValueError(
                 f"provider {self.provider_id.value} is enabled but declares no supported networks"

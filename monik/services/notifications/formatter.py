@@ -25,6 +25,7 @@ from monik.domain.enums.lifecycle import AmountConfirmationStatus
 from monik.domain.enums.providers import ProviderId
 from monik.domain.models.confirmation import AmountSnapshot, ConfirmationSnapshot
 from monik.domain.models.token import TokenKey
+from monik.domain.value_objects.identity import NetworkId
 from monik.services.notifications.reasons import describe_reason
 from monik.services.registries.networks import NetworkRegistry
 from monik.services.registries.providers import ProviderRegistry
@@ -91,9 +92,9 @@ class MessageFormatter:
             f"{emoji.pair} {escape(self._pair(snapshot))}",
             "-",
             "BUY",
-            self._provider_line(snapshot.buy_provider_id),
+            self._provider_line(snapshot.buy_provider_id, snapshot.network_id),
             "SELL",
-            self._provider_line(snapshot.sell_provider_id),
+            self._provider_line(snapshot.sell_provider_id, snapshot.network_id),
             "•••",
         ]
         highlights = _highlights(snapshot.amounts)
@@ -131,14 +132,16 @@ class MessageFormatter:
         name = escape(self._networks.display_name(snapshot.network_id))
         return f"{emoji} {name}" if emoji else name
 
-    def _provider_line(self, provider_id: ProviderId) -> str:
+    def _provider_line(self, provider_id: ProviderId, network_id: NetworkId) -> str:
         """Строка агрегатора: его значок и страница обмена.
 
         Название подставляется только тогда, когда страница не задана:
         оператору нужна ссылка, по которой он совершит обмен, а не имя.
+        Ссылка спрашивается вместе с сетью: у части агрегаторов сеть
+        зашита в адрес страницы.
         """
         emoji = self._providers.emoji(provider_id)
-        target = self._providers.ui_url(provider_id) or provider_id.value
+        target = self._providers.ui_url(provider_id, network_id) or provider_id.value
         return f"{emoji} {escape(target)}" if emoji else escape(target)
 
     def _local_time(self, snapshot: ConfirmationSnapshot) -> str:
@@ -280,6 +283,7 @@ def _highlights(amounts: tuple[AmountSnapshot, ...]) -> _Highlights:
     величине результата, а не о его статусе. При равенстве отмечается
     большая сумма — выбор детерминирован и не зависит от порядка.
     """
+
     def roi(item: AmountSnapshot) -> Decimal | None:
         return None if item.net_roi is None else item.net_roi.value
 

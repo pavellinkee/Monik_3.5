@@ -16,6 +16,7 @@ from monik.config import (
 from monik.config.sections import Environment, GasSource, PriceSource
 from monik.domain.enums import NotificationMode, OverlapPolicy, ProviderId, ThresholdMetric
 from monik.domain.errors import ConfigurationError
+from monik.domain.value_objects.identity import NetworkId
 from monik.services.observability.redaction import SecretRegistry
 
 from .conftest import AAVE_ADDRESS, USDT_ADDRESS
@@ -76,7 +77,7 @@ class TestValidConfiguration:
     ) -> None:
         document["scanner"]["level1"] = {"top_tokens": 1}
         config = _load(document, env)
-        symbols = [token.symbol for token in config.scan_tokens()]
+        symbols = [token.symbol for token in config.scan_tokens(NetworkId("polygon"))]
         assert symbols == ["AAVE"]
 
     def test_version_is_deterministic(self, document: dict[str, Any], env: dict[str, str]) -> None:
@@ -258,6 +259,7 @@ class TestCrossFieldValidation:
                 "chain_id": 1,
                 "native_token_symbol": "ETH",
                 "wrapped_native_address": AAVE_ADDRESS,
+                "base_token_address": AAVE_ADDRESS,
                 "enabled": False,
             }
         )
@@ -289,7 +291,7 @@ class TestCrossFieldValidation:
     def test_unknown_base_token_is_rejected(
         self, document: dict[str, Any], env: dict[str, str]
     ) -> None:
-        document["scanner"]["base_token_address"] = AAVE_ADDRESS
+        document["networks"][0]["base_token_address"] = AAVE_ADDRESS
         document["tokens"] = [document["tokens"][0]]
         with pytest.raises(ConfigurationError, match="unknown or disabled"):
             _load(document, env)
@@ -397,7 +399,7 @@ class TestFileLoading:
             },
             registry=SecretRegistry(),
         )
-        assert loaded.config.scanner.base_token_address == USDT_ADDRESS.lower()
+        assert loaded.config.networks[0].base_token_address == USDT_ADDRESS.lower()
         assert len(loaded.secrets) == 2
 
 

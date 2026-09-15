@@ -590,8 +590,10 @@ def _price_providers(
                 adapter,
                 clock,
                 # Пробная сумма — один native token: курс берётся из
-                # исполнимой котировки, а не из абстрактной цены.
-                probe_amount_raw=_native_probe_amount(config, tokens=tokens, networks=networks),
+                # исполнимой котировки, а не из абстрактной цены. Знаки
+                # берутся у токена в момент запроса, поэтому источник
+                # одинаково работает в любой сети.
+                probe_tokens=1,
                 ttl_seconds=config.prices.freshness_seconds,
             )
         )
@@ -611,16 +613,6 @@ def _price_providers(
             "no usable price source is configured; gas cost could not be converted"
         )
     return tuple(providers)
-
-
-def _native_probe_amount(
-    config: Configuration, *, tokens: TokenRegistry, networks: NetworkRegistry
-) -> int:
-    """Один native token сети в base units."""
-    native_key = networks.wrapped_native_token(config.scanner.base_network)
-    native = tokens.get(native_key)
-    decimals: int = native.decimals if native is not None else 18
-    return int(10**decimals)
 
 
 def _build_level2(

@@ -28,6 +28,7 @@ def base_document() -> dict[str, Any]:
                 "chain_id": 137,
                 "native_token_symbol": "POL",
                 "wrapped_native_address": WMATIC_ADDRESS,
+                "base_token_address": USDT_ADDRESS,
                 "enabled": True,
             }
         ],
@@ -62,8 +63,6 @@ def base_document() -> dict[str, Any]:
             },
         ],
         "scanner": {
-            "base_network": "polygon",
-            "base_token_address": USDT_ADDRESS,
             "amounts": ["100", "500"],
         },
     }

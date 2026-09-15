@@ -32,10 +32,17 @@ class TokenRegistry:
             )
             self._tokens[model.key] = model
             self._ranks[model.key] = token.rank
-        self._base_key = TokenKey(
-            network_id=configuration.scanner.base_network,
-            address=configuration.scanner.base_token_address,
-        )
+        #: Базовый токен каждой сети: вход и выход её круга. Ключей
+        #: столько же, сколько сетей: круг замыкается внутри сети
+        #: (``10_LEVEL_1_SCANNER.md`` §38), и общего базового токена у
+        #: разных сетей быть не может — адрес network-specific.
+        self._base_keys = {
+            network.network_id: TokenKey(
+                network_id=network.network_id,
+                address=network.base_token_address,
+            )
+            for network in configuration.networks
+        }
         self._top_n = configuration.scanner.level1.top_tokens
 
     def get(self, key: TokenKey) -> Token | None:
@@ -98,24 +105,33 @@ class TokenRegistry:
             if token.enabled and (network_id is None or token.network_id == network_id)
         )
 
-    @property
-    def base_token(self) -> Token:
-        """Базовый токен цикла: вход и выход round-trip."""
-        return self.require(self._base_key)
+    def base_key(self, network_id: NetworkId) -> TokenKey:
+        """Canonical identity базового токена сети."""
+        key = self._base_keys.get(network_id)
+        if key is None:
+            raise ConfigurationError(
+                f"network {network_id} has no base token configured",
+                code="network_base_token_missing",
+            )
+        return key
 
-    def scan_tokens(self) -> tuple[Token, ...]:
-        """Промежуточные токены для сканирования в порядке ранга.
+    def base_token(self, network_id: NetworkId) -> Token:
+        """Базовый токен цикла этой сети: вход и выход round-trip."""
+        return self.require(self.base_key(network_id))
+
+    def scan_tokens(self, network_id: NetworkId) -> tuple[Token, ...]:
+        """Промежуточные токены сети для сканирования в порядке ранга.
 
         Набор ограничен Top-N (``01_PROJECT_REQUIREMENTS.md`` §7): бессмысленно
         сканировать огромное количество токенов. Базовый токен исключён —
-        он является входом и выходом цикла.
+        он является входом и выходом цикла. Ограничение применяется к
+        каждой сети отдельно, потому что цикл всегда сетевой.
         """
+        base_key = self.base_key(network_id)
         candidates = [
             token
             for token in self._tokens.values()
-            if token.enabled
-            and token.network_id == self._base_key.network_id
-            and token.key != self._base_key
+            if token.enabled and token.network_id == network_id and token.key != base_key
         ]
         candidates.sort(
             key=lambda token: (

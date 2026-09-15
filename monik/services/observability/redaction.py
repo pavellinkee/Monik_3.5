@@ -52,6 +52,11 @@ _SENSITIVE_NAME_PARTS = (
 )
 
 #: Имена, которые содержат чувствительный фрагмент, но секретами не являются.
+#:
+#: Символ и адрес токена — публичные константы сети. Вычёркивание делало
+#: диагностику нечитаемой: запись «лучшая комбинация цикла» показывала
+#: ``best_token: [REDACTED]``, то есть ровно ту величину, ради которой
+#: запись и заводилась.
 _NAME_EXCEPTIONS = frozenset(
     {
         "token",
@@ -67,6 +72,10 @@ _NAME_EXCEPTIONS = frozenset(
         "token_decimals",
         "from_token",
         "to_token",
+        "base_token",
+        "scan_tokens",
+        "best_token",
+        "best_volatile_token",
         "profit_currency",
         "authenticated",
     }

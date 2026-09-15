@@ -26,6 +26,14 @@ class NetworkConfig(ConfigSection):
     native_token_symbol: TokenSymbol
     native_token_decimals: int = Field(default=18, ge=0, le=36)
     wrapped_native_address: TokenAddress
+    #: Базовый токен round-trip этой сети: вход и выход цикла.
+    #:
+    #: Принадлежит сети, а не сканеру: адрес токена network-specific
+    #: (``01_PROJECT_REQUIREMENTS.md`` §10), а конфигурация одной сети не
+    #: применяется к другой (``17_CONFIGURATION.md`` §24). Единая
+    #: настройка на весь сканер означала бы, что вторая сеть считает
+    #: круг от чужого контракта.
+    base_token_address: TokenAddress
     rpc_url: str | None = Field(default=None, max_length=512)
     #: Значок сети в уведомлении. Свойство сети, а не формата сообщения.
     emoji: str | None = Field(default=None, min_length=1, max_length=8)

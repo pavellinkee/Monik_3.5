@@ -140,10 +140,11 @@ class UniswapAdapter(HttpProviderAdapter):
         self._capabilities = AdapterCapabilities(
             provider_id=_PROVIDER,
             supported_networks=frozenset(NetworkId(name) for name in endpoints.SUPPORTED_CHAIN_IDS),
-            # Адаптер заявлен только для Polygon, где UniswapX не развёрнут:
-            # объявлять Dutch/Priority означало бы заявить возможность,
-            # которой нет (``06_AGGREGATOR_ADAPTERS.md`` §15).
-            routing_modes=endpoints.POLYGON_ROUTING_MODES,
+            # Только обычный своп: Dutch/Priority — аукционные заказы,
+            # маршрут которых Level 2 не может воспроизвести, поэтому
+            # такая возможность не заявляется (``06_AGGREGATOR_ADAPTERS.md``
+            # §15).
+            routing_modes=endpoints.SUPPORTED_ROUTING_MODES,
             supports_fixed_route=_SUPPORTS_FIXED_ROUTE,
             supports_fee_discovery=False,
             supports_gas_estimate=True,

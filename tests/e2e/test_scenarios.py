@@ -162,7 +162,7 @@ async def scenario(tmp_path: pathlib.Path, clock: FakeClock) -> AsyncIterator[Sc
 
 async def confirm_all(scenario: Scenario) -> tuple[Any, ...]:
     """Выполнить цикл Level 1 и дождаться подтверждений Level 2."""
-    result = await scenario.container.level1.scan()
+    result = (await scenario.container.level1.scan_all())[0]
     confirmations = await scenario.container.level2_worker.drain()
     return result, confirmations
 
@@ -220,8 +220,7 @@ async def test_unprofitable_opportunity_is_not_created(
     """Кандидат ниже порога не становится Opportunity."""
     started = await start_scenario(tmp_path, clock, rates=UNPROFITABLE)
     try:
-        result = await started.container.level1.scan()
-
+        result = (await started.container.level1.scan_all())[0]
         assert result.opportunities == ()
         assert await started.container.level2_worker.drain() == ()
     finally:
@@ -239,8 +238,7 @@ async def test_provider_timeout_yields_partial_scan(
         errors={ProviderId.ZERO_X: MonikTimeoutError("provider timed out")},
     )
     try:
-        result = await started.container.level1.scan()
-
+        result = (await started.container.level1.scan_all())[0]
         assert result.status is ScanStatus.PARTIAL
         assert result.opportunities == ()
         assert result.failures
@@ -255,8 +253,7 @@ async def test_rate_limit_is_not_unprofitable(tmp_path: pathlib.Path, clock: Fak
         tmp_path, clock, errors={ProviderId.ONEINCH: RateLimitError("429")}
     )
     try:
-        result = await started.container.level1.scan()
-
+        result = (await started.container.level1.scan_all())[0]
         assert result.opportunities == ()
         assert any(attempt.error_message == "429" for attempt in result.failures)
     finally:
@@ -270,7 +267,7 @@ async def test_route_unavailable_is_not_unprofitable(
     """Level 2 не подменяет маршрут: несовпадение — отдельная причина."""
     started = await start_scenario(tmp_path, clock)
     try:
-        result = await started.container.level1.scan()
+        result = (await started.container.level1.scan_all())[0]
         opportunity = result.opportunities[0]
         job = await started.container.repositories.jobs.get_by_opportunity(
             opportunity.opportunity_id
@@ -305,7 +302,7 @@ async def test_expired_opportunity_is_not_confirmed(
     """Просроченная возможность не подтверждается."""
     started = await start_scenario(tmp_path, clock)
     try:
-        result = await started.container.level1.scan()
+        result = (await started.container.level1.scan_all())[0]
         job = await started.container.repositories.jobs.get_by_opportunity(
             result.opportunities[0].opportunity_id
         )
@@ -330,9 +327,8 @@ async def test_repeated_scan_does_not_duplicate_opportunity(
     scenario: Scenario,
 ) -> None:
     """Тот же кандидат в окне дедупликации не создаёт вторую возможность."""
-    first = await scenario.container.level1.scan()
-    second = await scenario.container.level1.scan()
-
+    first = (await scenario.container.level1.scan_all())[0]
+    second = (await scenario.container.level1.scan_all())[0]
     assert len(first.opportunities) == 1
     assert second.opportunities == ()
     row = await scenario.database.fetch_one("SELECT COUNT(*) AS count FROM opportunities", ())
@@ -464,8 +460,7 @@ async def test_scan_covers_every_configured_amount(
     document["scanner"]["amounts"] = ["100", "500"]
     started = await start_scenario(tmp_path, clock, document=document)
     try:
-        await started.container.level1.scan()
-
+        await started.container.level1.scan_all()
         buys = [
             call
             for adapter in fake_adapters(started.container)
@@ -481,8 +476,7 @@ async def test_scan_covers_every_configured_amount(
 
 async def test_quote_requests_never_bypass_the_adapter(scenario: Scenario) -> None:
     """Все котировки получены через адаптеры (``CLAUDE.md`` §14)."""
-    await scenario.container.level1.scan()
-
+    await scenario.container.level1.scan_all()
     calls = [call for adapter in fake_adapters(scenario.container) for call in adapter.quote_calls]
     assert calls
     assert all(isinstance(call, QuoteRequest) for call in calls)

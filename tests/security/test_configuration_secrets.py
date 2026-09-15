@@ -56,7 +56,8 @@ def test_diagnostics_report_useful_state(document: dict[str, Any]) -> None:
     diagnostics = configuration_diagnostics(loaded)
     assert diagnostics["environment"] == "development"
     assert diagnostics["providers"] == ["oneinch", "zero_x"]
-    assert diagnostics["networks"] == ["polygon"]
+    assert [network["network_id"] for network in diagnostics["networks"]] == ["polygon"]
+    assert diagnostics["networks"][0]["scan_tokens"] == ["AAVE"]
     assert diagnostics["resolved_env_references"] == 4
     assert diagnostics["level2"]["max_parallel"] == 20
 
@@ -65,7 +66,7 @@ def test_validation_error_message_does_not_expose_secrets(
     document: dict[str, Any],
 ) -> None:
     """Секрет не должен попадать в текст ошибки (17 §61)."""
-    document["scanner"]["base_token_address"] = ONEINCH_SECRET
+    document["networks"][0]["base_token_address"] = ONEINCH_SECRET
     registry = SecretRegistry()
     registry.register(ONEINCH_SECRET)
     with pytest.raises(ConfigurationError) as error:
@@ -104,7 +105,7 @@ def test_diagnostics_redact_secret_leaked_into_plain_field(
     loaded = parse_configuration(document, environ=ENV, registry=registry)
     rendered = json.dumps(configuration_diagnostics(loaded), ensure_ascii=False)
     assert ONEINCH_SECRET not in rendered
-    assert loaded.config.scanner.base_token_address == USDT_ADDRESS.lower()
+    assert loaded.config.networks[0].base_token_address == USDT_ADDRESS.lower()
     assert REDACTED not in loaded.config.version
 
 

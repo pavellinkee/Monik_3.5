@@ -178,7 +178,7 @@ def test_system_notification_text_never_carries_credentials() -> None:
                 kind=StartupKind.RESTART,
                 version="0.1.0",
                 environment="production",
-                network="polygon",
+                networks=("polygon",),
                 providers=("uniswap",),
                 health=health,
             )

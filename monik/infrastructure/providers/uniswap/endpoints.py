@@ -30,7 +30,7 @@ __all__ = [
     "DEFAULT_BASE_URL",
     "DEFAULT_ROUTING_PREFERENCE",
     "HEALTH_PROBES",
-    "POLYGON_ROUTING_MODES",
+    "SUPPORTED_ROUTING_MODES",
     "QUOTE_PATH",
     "ROUTING_MODES",
     "ROUTING_PREFERENCES",
@@ -52,6 +52,9 @@ QUOTE_PATH = "/v1/quote"
 #: Сети, поддержка которых заявлена адаптером.
 SUPPORTED_CHAIN_IDS: dict[str, int] = {
     "polygon": 137,
+    # Проверено живым запросом 2026-09-15: Trading API отвечает
+    # котировкой в режиме CLASSIC, форма ответа та же, что и на Polygon.
+    "arbitrum": 42161,
 }
 
 #: Соответствие значений ``routing`` из ответа нормализованным режимам.
@@ -65,12 +68,16 @@ ROUTING_MODES: dict[str, RoutingMode] = {
     "PRIORITY": RoutingMode.UNISWAPX_PRIORITY,
 }
 
-#: Режимы маршрутизации, доступные на Polygon.
+#: Режимы маршрутизации, которые адаптер заявляет.
 #:
-#: UniswapX на Polygon не развёрнут: Dutch V2 работает на Mainnet, Arbitrum
-#: и Base, Dutch V3 — только на Arbitrum. Заявлять их поддержку означало бы
-#: объявить возможность, которой нет (``06_AGGREGATOR_ADAPTERS.md`` §15).
-POLYGON_ROUTING_MODES: frozenset[RoutingMode] = frozenset({RoutingMode.CLASSIC})
+#: Только CLASSIC — обычный своп через пулы. UniswapX на Polygon не
+#: развёрнут вовсе, а на Arbitrum Dutch-режимы существуют, но это не
+#: своп: заказ исполняет филлер на аукционе, и «маршрут» такой котировки
+#: нельзя ни зафиксировать, ни воспроизвести проверкой Level 2
+#: (``13_FIXED_ROUTE.md``). Заявлять режим, результат которого мы не
+#: умеем подтверждать, означало бы объявить возможность, которой нет
+#: (``06_AGGREGATOR_ADAPTERS.md`` §15).
+SUPPORTED_ROUTING_MODES: frozenset[RoutingMode] = frozenset({RoutingMode.CLASSIC})
 
 #: Допустимые значения ``routingPreference`` в запросе.
 ROUTING_PREFERENCES: frozenset[str] = frozenset({"BEST_PRICE", "FASTEST"})
@@ -98,9 +105,10 @@ class HealthProbe:
     amount: str
 
 
-#: Проверочные пары по сетям. Адреса — канонические контракты Polygon:
-#: USDT ``0xc2132D05...`` и native USDC ``0x3c499c54...``. Это публичные
-#: константы сети, а не секреты и не выдуманные значения.
+#: Проверочные пары по сетям. Адреса — канонические контракты сети:
+#: на Polygon USDT ``0xc2132D05...`` и native USDC ``0x3c499c54...``, на
+#: Arbitrum USDT ``0xFd086bC7...`` и native USDC ``0xaf88d065...``. Это
+#: публичные константы сети, а не секреты и не выдуманные значения.
 HEALTH_PROBES: dict[str, HealthProbe] = {
     "polygon": HealthProbe(
         chain_id=137,
@@ -108,6 +116,12 @@ HEALTH_PROBES: dict[str, HealthProbe] = {
         token_out="0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
         # 1 USDT (6 знаков): минимальная сумма, для которой маршрут
         # заведомо существует.
+        amount="1000000",
+    ),
+    "arbitrum": HealthProbe(
+        chain_id=42161,
+        token_in="0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9",
+        token_out="0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
         amount="1000000",
     ),
 }

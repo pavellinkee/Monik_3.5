@@ -100,7 +100,7 @@ async def test_crash_after_opportunity_creation(tmp_path: pathlib.Path, clock: F
     """Крах сразу после создания Opportunity не теряет её Job."""
     instance = runtime(tmp_path, clock)
     app = await instance.start()
-    result = await app.container.level1.scan()
+    result = (await app.container.level1.scan_all())[0]
     opportunity = result.opportunities[0]
     await instance.crash()
 
@@ -123,7 +123,7 @@ async def test_crash_during_job_execution_does_not_confirm(
     """``RUNNING`` после аварии не становится успехом (``35`` §135)."""
     instance = runtime(tmp_path, clock)
     app = await instance.start()
-    result = await app.container.level1.scan()
+    result = (await app.container.level1.scan_all())[0]
     job = await app.container.repositories.jobs.get_by_opportunity(
         result.opportunities[0].opportunity_id
     )
@@ -149,7 +149,7 @@ async def test_repeated_recovery_is_idempotent(tmp_path: pathlib.Path, clock: Fa
     """Повторное восстановление не создаёт дублей."""
     instance = runtime(tmp_path, clock)
     app = await instance.start()
-    result = await app.container.level1.scan()
+    result = (await app.container.level1.scan_all())[0]
     job = await app.container.repositories.jobs.get_by_opportunity(
         result.opportunities[0].opportunity_id
     )
@@ -177,7 +177,7 @@ async def test_crash_after_confirmation_snapshot(tmp_path: pathlib.Path, clock: 
     """Сохранённый confirmation snapshot переживает рестарт."""
     instance = runtime(tmp_path, clock, telegram=True)
     app = await instance.start()
-    result = await app.container.level1.scan()
+    result = (await app.container.level1.scan_all())[0]
     confirmations = await app.container.level2_worker.drain()
     outcome = await app.container.opportunities.record_confirmation(
         result.opportunities[0], confirmations[0]
@@ -211,7 +211,7 @@ async def test_crash_during_notification_delivery(tmp_path: pathlib.Path, clock:
     """Прерванная доставка не считается успешной (``15`` §61)."""
     instance = runtime(tmp_path, clock, telegram=True)
     app = await instance.start()
-    result = await app.container.level1.scan()
+    result = (await app.container.level1.scan_all())[0]
     confirmations = await app.container.level2_worker.drain()
     outcome = await app.container.opportunities.record_confirmation(
         result.opportunities[0], confirmations[0]
@@ -240,7 +240,7 @@ async def test_sent_notification_is_not_resent_after_restart(
     """Уже доставленное уведомление рестарт не трогает (``15`` §60)."""
     instance = runtime(tmp_path, clock, telegram=True)
     app = await instance.start()
-    result = await app.container.level1.scan()
+    result = (await app.container.level1.scan_all())[0]
     confirmations = await app.container.level2_worker.drain()
     outcome = await app.container.opportunities.record_confirmation(
         result.opportunities[0], confirmations[0]
@@ -268,7 +268,7 @@ async def test_restart_does_not_duplicate_scan_state(
     """Рестарт не создаёт повторных циклов и возможностей."""
     instance = runtime(tmp_path, clock)
     app = await instance.start()
-    await app.container.level1.scan()
+    await app.container.level1.scan_all()
     await instance.crash()
 
     app = await instance.start()
@@ -286,7 +286,7 @@ async def test_retry_after_restart_starts_a_new_attempt(
     """Повтор после рестарта — новая попытка того же ``#K``."""
     instance = runtime(tmp_path, clock)
     app = await instance.start()
-    result = await app.container.level1.scan()
+    result = (await app.container.level1.scan_all())[0]
     confirmations = await app.container.level2_worker.drain()
     first_revision = confirmations[0].revision
     k_id = confirmations[0].k_id

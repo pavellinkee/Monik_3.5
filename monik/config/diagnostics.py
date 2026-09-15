@@ -34,10 +34,19 @@ def configuration_diagnostics(loaded: LoadedConfiguration) -> dict[str, Any]:
         "version": config.version,
         "environment": config.application.environment.value,
         "timezone": config.application.timezone,
-        "networks": [str(network.network_id) for network in config.enabled_networks],
+        # Сети перечисляются вместе с базовым токеном и набором
+        # сканирования: по одному списку имён нельзя понять, от какого
+        # контракта считается круг в каждой сети и что в ней проверяется.
+        "networks": [
+            {
+                "network_id": str(network.network_id),
+                "base_token": network.base_token_address,
+                "scan_tokens": [token.symbol for token in config.scan_tokens(network.network_id)],
+            }
+            for network in config.enabled_networks
+        ],
         "providers": [provider.provider_id.value for provider in config.enabled_providers],
         "tokens": len(config.enabled_tokens),
-        "scan_tokens": [token.symbol for token in config.scan_tokens()],
         "provider_pairs": [f"{buy.value}->{sell.value}" for buy, sell in config.provider_pairs()],
         "amounts": [str(amount) for amount in config.scanner.amounts],
         "level1": {

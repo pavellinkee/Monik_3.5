@@ -21,6 +21,7 @@ from monik.domain.models.opportunity import Candidate, Opportunity
 from monik.domain.models.scan import BestCombination, Scan, ScanScope, ScanStatistics
 from monik.domain.models.token import TokenKey
 from monik.domain.value_objects.identifiers import ScanId
+from monik.domain.value_objects.identity import NetworkId
 from monik.infrastructure.providers.contract import AggregatorAdapter
 from monik.services.level1.cycle import TokenCycle
 from monik.services.level1.dedup import DeduplicationGuard
@@ -82,30 +83,96 @@ class Level1Scanner:
         self._clock = clock
         self._metrics = metrics
 
-    def stable_scope(self) -> ScanScope | None:
-        """Границы учащённого прохода по стабильным токенам.
+    def scan_networks(self) -> tuple[NetworkId, ...]:
+        """Сети, подлежащие сканированию в этом такте."""
+        return self._scope_builder.scan_networks()
 
-        ``None`` означает, что проходу не с чем работать: решение
+    def scopes(self) -> tuple[ScanScope, ...]:
+        """Границы обычного прохода — по одному scope на сеть.
+
+        Сеть, у которой сейчас нет ни одного работающего провайдера,
+        пропускается: это решение оператора (часы работы), а не сбой, и
+        пустая запись сканирования по ней не создаётся.
+        """
+        return tuple(
+            self._scope_builder.build(network_id)
+            for network_id in self._scope_builder.scan_networks()
+            if self._scope_builder.active_providers(network_id)
+        )
+
+    def stable_scopes(self) -> tuple[ScanScope, ...]:
+        """Границы учащённого прохода по стабильным токенам каждой сети.
+
+        Сеть, которой нечего проверять, в набор не попадает: решение
         принимает вызывающая сторона, а пустой цикл не создаётся.
         """
-        return self._scope_builder.build_stable()
+        scopes = (
+            self._scope_builder.build_stable(network_id)
+            for network_id in self._scope_builder.scan_networks()
+        )
+        return tuple(scope for scope in scopes if scope is not None)
 
     def has_active_providers(self) -> bool:
-        """Есть ли сейчас провайдер в своём рабочем окне.
+        """Есть ли сейчас хотя бы одна сеть с работающим провайдером.
 
-        Спрашивается до начала цикла: когда отдыхают все, цикл не нужен
+        Спрашивается до начала такта: когда отдыхают все, цикл не нужен
         вовсе, и создавать пустую запись сканирования незачем.
         """
-        return bool(self._scope_builder.active_providers())
+        return any(
+            self._scope_builder.active_providers(network_id)
+            for network_id in self._scope_builder.scan_networks()
+        )
 
-    async def scan(self, scope: ScanScope | None = None) -> ScanResult:
-        """Выполнить цикл.
+    async def scan_all(self) -> tuple[ScanResult, ...]:
+        """Выполнить обычный цикл в каждой сканируемой сети.
+
+        Возвращаются только состоявшиеся циклы: сети независимы, и отказ
+        узла или провайдера в одной из них не должен отменять поиск в
+        остальных.
+        """
+        return await self._sweep(self.scopes())
+
+    async def scan_stable_all(self) -> tuple[ScanResult, ...]:
+        """Выполнить учащённый проход по стабильным токенам каждой сети."""
+        return await self._sweep(self.stable_scopes())
+
+    async def _sweep(self, scopes: tuple[ScanScope, ...]) -> tuple[ScanResult, ...]:
+        """Пройти набор scope'ов параллельно.
+
+        Параллельно, а не подряд: пока провайдер выдерживает свою паузу
+        между запросами в одной сети, в другой работает второй, и такт не
+        растягивается на сумму сетей. Комбинация из разных сетей при этом
+        возникнуть не может — каждый цикл замкнут в своём scope
+        (``10_LEVEL_1_SCANNER.md`` §38).
+        """
+        if not scopes:
+            return ()
+        outcomes = await asyncio.gather(
+            *(self.scan(scope) for scope in scopes), return_exceptions=True
+        )
+        results: list[ScanResult] = []
+        for scope, outcome in zip(scopes, outcomes, strict=True):
+            if isinstance(outcome, asyncio.CancelledError):
+                raise outcome
+            if isinstance(outcome, BaseException):
+                _LOGGER.warning(
+                    "level 1 scan failed",
+                    extra=log_fields(network=str(scope.networks[0]), error=type(outcome).__name__),
+                )
+                continue
+            results.append(outcome)
+        return tuple(results)
+
+    async def scan(self, scope: ScanScope) -> ScanResult:
+        """Выполнить цикл одной сети.
 
         ``scope`` фиксируется на старте: изменение конфигурации применяется
-        со следующего цикла (``02_LEVEL1_SCANNER.md`` §69).
+        со следующего цикла (``02_LEVEL1_SCANNER.md`` §69). Scope всегда
+        передаётся явно и всегда принадлежит одной сети — сканер не
+        выбирает сеть сам, иначе выбор существовал бы в двух местах.
         """
         config = self._configuration.scanner.level1
-        scan_scope = scope if scope is not None else self._scope_builder.build()
+        scan_scope = scope
         scan_id = ScanId.generate()
         started_at = self._clock.now()
         scan = Scan(
@@ -188,13 +255,15 @@ class Level1Scanner:
             clock=self._clock,
             scan_id=scan.scan_id,
             network_id=network_id,
-            base_token=self._scope_builder.base_token,
+            base_token=self._scope_builder.base_token(network_id),
             providers=scope.providers,
             pairs=pairs,
             raw_amounts=scope.raw_amounts,
         )
         tokens = [
-            token for token in self._scope_builder.scan_tokens() if token.key in set(scope.tokens)
+            token
+            for token in self._scope_builder.scan_tokens(network_id)
+            if token.key in set(scope.tokens)
         ]
         results = await asyncio.gather(
             *(cycle.run(token) for token in tokens), return_exceptions=True

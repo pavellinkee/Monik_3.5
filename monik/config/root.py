@@ -147,6 +147,14 @@ class Configuration(ConfigSection):
                     f"{', '.join(sorted(unknown))}"
                 )
 
+        for network_id in sorted(enabled_network_ids):
+            if not any(
+                network_id in provider.supported_networks for provider in self.enabled_providers
+            ):
+                raise ValueError(
+                    f"network {network_id} is enabled but no enabled provider supports it"
+                )
+
         enabled_provider_ids = {provider.provider_id for provider in self.enabled_providers}
         for pair in self.routes.allowed_pairs:
             for provider_id in (pair.buy, pair.sell):
@@ -164,39 +172,41 @@ class Configuration(ConfigSection):
 
     @model_validator(mode="after")
     def _validate_scanner_scope(self) -> Self:
-        """Базовая сеть, базовый токен и суммы обязаны быть согласованы."""
-        base_network = self.network(self.scanner.base_network)
-        if base_network is None or not base_network.enabled:
-            raise ValueError(
-                f"scanner base_network {self.scanner.base_network} is unknown or disabled"
-            )
-        base_token = self.token(self.scanner.base_network, self.scanner.base_token_address)
-        if base_token is None or not base_token.enabled:
-            raise ValueError(
-                f"scanner base token {self.scanner.base_token_address} is unknown or disabled "
-                f"on network {self.scanner.base_network}"
-            )
+        """Каждая включённая сеть обязана быть пригодна для цикла.
 
-        for amount in self.scanner.amounts:
-            try:
-                TokenAmount.from_decimal(amount, base_token.decimals)
-            except ValueError as exc:
+        Проверка идёт по сетям, а не по одной «базовой»: круг замыкается
+        внутри сети (``10_LEVEL_1_SCANNER.md`` §38), поэтому непригодная
+        сеть — это непригодный цикл, а не непригодная программа. Сеть,
+        которую не на чем сканировать, выключается флагом ``enabled``,
+        а не молча пропускается: иначе опечатка в адресе выглядела бы
+        как сознательное отключение.
+        """
+        if not self.enabled_networks:
+            raise ValueError("at least one network must be enabled: Level 1 has nothing to scan")
+
+        for network in self.enabled_networks:
+            base_token = self.token(network.network_id, network.base_token_address)
+            if base_token is None or not base_token.enabled:
                 raise ValueError(
-                    f"scanner amount {amount} is not representable with "
-                    f"{base_token.decimals} decimals of {base_token.symbol}"
-                ) from exc
+                    f"base token {network.base_token_address} is unknown or disabled "
+                    f"on network {network.network_id}"
+                )
 
-        tradable = [
-            token
-            for token in self.enabled_tokens
-            if token.network_id == self.scanner.base_network
-            and token.address != self.scanner.base_token_address
-        ]
-        if not tradable:
-            raise ValueError(
-                "scanner needs at least one enabled token besides the base token "
-                f"on network {self.scanner.base_network}"
-            )
+            for amount in self.scanner.amounts:
+                try:
+                    TokenAmount.from_decimal(amount, base_token.decimals)
+                except ValueError as exc:
+                    raise ValueError(
+                        f"scanner amount {amount} is not representable with "
+                        f"{base_token.decimals} decimals of {base_token.symbol} "
+                        f"on network {network.network_id}"
+                    ) from exc
+
+            if not self.scan_tokens(network.network_id):
+                raise ValueError(
+                    "scanner needs at least one enabled token besides the base token "
+                    f"on network {network.network_id}"
+                )
         return self
 
     @model_validator(mode="after")
@@ -314,17 +324,21 @@ class Configuration(ConfigSection):
                 pairs.append((buy.provider_id, sell.provider_id))
         return tuple(pairs)
 
-    def scan_tokens(self) -> tuple[TokenConfig, ...]:
-        """Токены, участвующие в сканировании, в порядке ранга.
+    def scan_tokens(self, network_id: NetworkId) -> tuple[TokenConfig, ...]:
+        """Токены сети, участвующие в сканировании, в порядке ранга.
 
         Ограничивается ``level1.top_tokens`` (``01_PROJECT_REQUIREMENTS.md`` §7).
         Базовый токен в набор не входит: он является входом и выходом цикла.
+        Top-N применяется к каждой сети отдельно: ограничение говорит,
+        сколько токенов проверять в цикле, а цикл всегда сетевой.
         """
+        network = self.network(network_id)
+        if network is None:
+            return ()
         candidates = [
             token
             for token in self.enabled_tokens
-            if token.network_id == self.scanner.base_network
-            and token.address != self.scanner.base_token_address
+            if token.network_id == network_id and token.address != network.base_token_address
         ]
         candidates.sort(key=lambda token: (token.rank is None, token.rank or 0, token.symbol))
         return tuple(candidates[: self.scanner.level1.top_tokens])

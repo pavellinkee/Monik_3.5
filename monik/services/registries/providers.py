@@ -43,6 +43,12 @@ class ProviderRegistry:
             provider.provider_id: (provider.emoji, provider.ui_url)
             for provider in configuration.providers
         }
+        #: Ссылки на обмен, заданные для отдельных сетей. Общая ссылка
+        #: остаётся значением по умолчанию: сеть в адресе — особенность
+        #: конкретного агрегатора, а не правило системы.
+        self._network_ui_urls = {
+            provider.provider_id: dict(provider.ui_urls) for provider in configuration.providers
+        }
         #: Участвует ли провайдер в учащённом проходе. Ограничение
         #: принадлежит провайдеру: суточную квоту расходует именно он.
         self._fast_scan = {
@@ -84,8 +90,17 @@ class ProviderRegistry:
         """Значок провайдера, если он задан."""
         return self._presentation.get(provider_id, (None, None))[0]
 
-    def ui_url(self, provider_id: ProviderId) -> str | None:
-        """Страница обмена провайдера, если она задана."""
+    def ui_url(self, provider_id: ProviderId, network_id: NetworkId | None = None) -> str | None:
+        """Страница обмена провайдера, если она задана.
+
+        Ссылка для конкретной сети имеет приоритет над общей: у части
+        агрегаторов сеть зашита в адрес, и общая ссылка привела бы
+        оператора не в ту сеть.
+        """
+        if network_id is not None:
+            specific = self._network_ui_urls.get(provider_id, {}).get(network_id)
+            if specific is not None:
+                return specific
         return self._presentation.get(provider_id, (None, None))[1]
 
     def participates_in_fast_scan(self, provider_id: ProviderId) -> bool:

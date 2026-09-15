@@ -275,7 +275,7 @@ class Application:
                 kind=self.startup_kind,
                 version=APPLICATION_VERSION,
                 environment=config.application.environment.value,
-                network=str(config.scanner.base_network),
+                networks=tuple(str(network.network_id) for network in config.enabled_networks),
                 providers=tuple(
                     provider.provider_id.value for provider in config.enabled_providers
                 ),
@@ -481,6 +481,7 @@ def _token_check_task(container: Container) -> TaskHandler:
     который умеет отдавать список целиком. Ничего не выключает: расхождение
     только показывается, решение остаётся за оператором.
     """
+
     async def run() -> None:
         if container.token_check is None:
             return
@@ -558,7 +559,10 @@ def _level1_task(container: Container) -> TaskHandler:
             # оператора, а не сбой: цикл просто не нужен.
             _LOGGER.info("level 1 scan skipped: no provider is within its working hours")
             return
-        await container.level1.scan()
+        if not await container.level1.scan_all():
+            # Ни одна сеть не дала завершённого цикла: состояние подсистемы
+            # не обновляется, причина уже записана в журнал.
+            return
         container.health.set_component(
             "level1",
             ApplicationHealthStatus.HEALTHY,
@@ -583,11 +587,9 @@ def _stable_scan_task(container: Container) -> TaskHandler:
     async def run() -> None:
         if not container.control.is_running:
             return
-        scope = container.level1.stable_scope()
-        if scope is None:
-            # Стабильных токенов нет или ни один провайдер не участвует.
-            return
-        await container.level1.scan(scope)
+        # Пустой результат означает, что ни в одной сети нечего проверять:
+        # нет стабильных токенов или ни один провайдер не участвует.
+        await container.level1.scan_stable_all()
 
     return run
 

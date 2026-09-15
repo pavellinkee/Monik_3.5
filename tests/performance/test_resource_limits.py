@@ -147,8 +147,7 @@ async def test_level1_scans_all_tokens(database: Database, clock: FakeClock) -> 
         adapters=adapters,  # type: ignore[arg-type]
     )
 
-    result = await harness.scanner.scan()
-
+    result = (await harness.scanner.scan_all())[0]
     scanned = {
         call.output_token.symbol
         for adapter in adapters.values()
@@ -171,8 +170,7 @@ async def test_concurrency_limit_is_respected_under_load(
         adapters=counting_adapters(clock, gauge),  # type: ignore[arg-type]
     )
 
-    await harness.scanner.scan()
-
+    await harness.scanner.scan_all()
     assert gauge.peak > 1, "нагрузочный сценарий обязан выполнять запросы параллельно"
     assert gauge.peak <= 3
 
@@ -188,8 +186,7 @@ async def test_opportunity_limit_bounds_created_records(
         adapters=counting_adapters(clock),  # type: ignore[arg-type]
     )
 
-    result = await harness.scanner.scan()
-
+    result = (await harness.scanner.scan_all())[0]
     assert len(result.opportunities) <= 2
     row = await database.fetch_one("SELECT COUNT(*) AS count FROM opportunities", ())
     assert row is not None and row["count"] <= 2
@@ -206,8 +203,7 @@ async def test_backpressure_stops_unbounded_handoff(database: Database, clock: F
         dispatcher=dispatcher,
     )
 
-    result = await harness.scanner.scan()
-
+    result = (await harness.scanner.scan_all())[0]
     assert len(result.opportunities) <= 1
     assert len(dispatcher.submitted) <= 1
 
@@ -269,8 +265,7 @@ async def test_repeated_scans_do_not_grow_state(database: Database, clock: FakeC
     )
 
     for _ in range(5):
-        await harness.scanner.scan()
-
+        await harness.scanner.scan_all()
     opportunities = await database.fetch_one("SELECT COUNT(*) AS count FROM opportunities", ())
     scans = await database.fetch_one("SELECT COUNT(*) AS count FROM scans", ())
     assert opportunities is not None and scans is not None
@@ -289,7 +284,7 @@ async def test_finished_scans_are_cleaned_up(database: Database, clock: FakeCloc
         clock,
         adapters=counting_adapters(clock),  # type: ignore[arg-type]
     )
-    await harness.scanner.scan()
+    await harness.scanner.scan_all()
     clock.advance(timedelta(days=30))
 
     removed = await SqliteScanRepository(database).delete_finished_before(clock.now())
@@ -308,8 +303,7 @@ async def test_quote_history_is_not_persisted(database: Database, clock: FakeClo
         adapters=counting_adapters(clock),  # type: ignore[arg-type]
     )
 
-    result = await harness.scanner.scan()
-
+    result = (await harness.scanner.scan_all())[0]
     tables = await database.fetch_all("SELECT name FROM sqlite_master WHERE type = 'table'", ())
     names = {str(row["name"]) for row in tables}
     assert "quotes" not in names

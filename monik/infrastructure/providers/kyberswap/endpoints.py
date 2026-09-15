@@ -41,6 +41,10 @@ DEFAULT_CLIENT_ID = "monik"
 #: запроса. Заявлено только то, что проверено живым запросом.
 SUPPORTED_NETWORK_SLUGS: dict[str, str] = {
     "polygon": "polygon",
+    # Проверено живым запросом 2026-09-15: путь ``/arbitrum/api/v1/routes``
+    # отвечает маршрутом в той же форме, что и Polygon. Обозначение сети
+    # в пути — единственная её особенность у этого агрегатора.
+    "arbitrum": "arbitrum",
 }
 
 
@@ -54,11 +58,18 @@ class HealthProbe:
 
 
 #: Проверочные пары по сетям. Адреса — публичные канонические контракты
-#: Polygon: USDT ``0xc2132D05…`` и native USDC ``0x3c499c54…``.
+#: сети: на Polygon USDT ``0xc2132D05…`` и native USDC ``0x3c499c54…``.
 HEALTH_PROBES: dict[str, HealthProbe] = {
     "polygon": HealthProbe(
         token_in="0xc2132D05D31c914a87C6611C10748AEb04B58e8F",
         token_out="0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+        amount="1000000",
+    ),
+    # Arbitrum: USDT ``0xFd086bC7…`` и native USDC ``0xaf88d065…`` —
+    # публичные канонические контракты сети.
+    "arbitrum": HealthProbe(
+        token_in="0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9",
+        token_out="0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
         amount="1000000",
     ),
 }

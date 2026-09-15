@@ -73,7 +73,7 @@ class TestEnvironmentOverrides:
     def test_override_into_non_mapping_is_rejected(
         self, document: dict[str, Any], env: dict[str, str]
     ) -> None:
-        env["MONIK__SCANNER__BASE_NETWORK__NESTED"] = "x"
+        env["MONIK__APPLICATION__TIMEZONE__NESTED"] = "x"
         with pytest.raises(ConfigurationError, match="non-mapping"):
             _load(document, env)
 

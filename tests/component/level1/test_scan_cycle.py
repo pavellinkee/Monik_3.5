@@ -49,8 +49,7 @@ def configured(**scanner_overrides: object) -> Configuration:
 
 async def test_scan_creates_opportunity_and_level2_job(harness: Level1Harness) -> None:
     """Основной output Level 1 — Opportunity + Level 2 Job (§91)."""
-    result = await harness.scanner.scan()
-
+    result = (await harness.scanner.scan_all())[0]
     assert result.status is ScanStatus.COMPLETE
     assert len(result.opportunities) == 1
     opportunity = result.opportunities[0]
@@ -65,7 +64,7 @@ async def test_scan_creates_opportunity_and_level2_job(harness: Level1Harness) -
 
 async def test_level2_job_outranks_new_level1_scan(harness: Level1Harness) -> None:
     """Job получает более высокий приоритет, чем новый scan (§45, §59)."""
-    await harness.scanner.scan()
+    await harness.scanner.scan_all()
     _, job = harness.dispatcher.submitted[0]
     assert job.priority is RequestPriority.LEVEL2
     assert job.priority.rank < RequestPriority.LEVEL1_BUY.rank
@@ -74,7 +73,7 @@ async def test_level2_job_outranks_new_level1_scan(harness: Level1Harness) -> No
 
 async def test_opportunity_and_job_are_persisted_atomically(harness: Level1Harness) -> None:
     """Opportunity без Job существовать не должна (``CLAUDE.md`` §29)."""
-    result = await harness.scanner.scan()
+    result = (await harness.scanner.scan_all())[0]
     stored = await harness.opportunities.get_by_v_id(result.opportunities[0].v_id)
     assert stored is not None
     assert stored.opportunity_id == result.opportunities[0].opportunity_id
@@ -82,7 +81,7 @@ async def test_opportunity_and_job_are_persisted_atomically(harness: Level1Harne
 
 async def test_max_buy_is_selected_before_sell(harness: Level1Harness) -> None:
     """SELL считается от выхода лучшего BUY (§12)."""
-    result = await harness.scanner.scan()
+    result = (await harness.scanner.scan_all())[0]
     opportunity = result.opportunities[0]
     amount = opportunity.amounts[0]
     # 1inch даёт 0.050 AAVE за USDT, 0x — 0.049: MAX BUY принадлежит 1inch.
@@ -94,7 +93,7 @@ async def test_buy_quote_is_requested_for_every_enabled_provider(
     harness: Level1Harness,
 ) -> None:
     """Оба провайдера участвуют в сравнении (§12, §71)."""
-    await harness.scanner.scan()
+    await harness.scanner.scan_all()
     buys = {
         provider_id: [call for call in adapter.quote_calls if call.operation is OperationType.BUY]
         for provider_id, adapter in harness.adapters.items()
@@ -105,7 +104,7 @@ async def test_buy_quote_is_requested_for_every_enabled_provider(
 
 async def test_sell_starts_from_the_intermediate_token(harness: Level1Harness) -> None:
     """SELL начинается ровно с промежуточного токена BUY (§82)."""
-    await harness.scanner.scan()
+    await harness.scanner.scan_all()
     sells = [
         call
         for adapter in harness.adapters.values()
@@ -120,7 +119,7 @@ async def test_sell_starts_from_the_intermediate_token(harness: Level1Harness) -
 
 async def test_scan_metadata_is_persisted(harness: Level1Harness) -> None:
     """Метаданные цикла сохраняются (§57, §76)."""
-    result = await harness.scanner.scan()
+    result = (await harness.scanner.scan_all())[0]
     stored = await harness.scans.get(result.scan.scan_id)
     assert stored is not None
     assert stored.status is ScanStatus.COMPLETE
@@ -140,8 +139,7 @@ async def test_search_uses_a_single_amount(database: Database, clock: FakeClock)
     найденную возможность.
     """
     harness = build_harness(configured(amounts=["100", "500"]), database, clock)
-    result = await harness.scanner.scan()
-
+    result = (await harness.scanner.scan_all())[0]
     opportunity = result.opportunities[0]
     assert len(opportunity.amounts) == 1
     # По умолчанию поиск ведётся наименьшей из проверяемых сумм.
@@ -154,8 +152,7 @@ async def test_search_amount_is_configurable(database: Database, clock: FakeCloc
     document["scanner"].setdefault("level1", {})["amount"] = "500"
     configuration = parse_configuration(document, environ=dict(VALID_ENV)).config
     harness = build_harness(configuration, database, clock)
-    result = await harness.scanner.scan()
-
+    result = (await harness.scanner.scan_all())[0]
     amounts = result.opportunities[0].amounts
     assert [amount.input_amount.raw for amount in amounts] == [500_000_000]
 
@@ -165,8 +162,7 @@ async def test_single_route_snapshot_serves_the_opportunity(
 ) -> None:
     """Маршрут у возможности один: отдельного маршрута у суммы нет (§24, §89)."""
     harness = build_harness(configured(amounts=["100", "500"]), database, clock)
-    result = await harness.scanner.scan()
-
+    result = (await harness.scanner.scan_all())[0]
     opportunity = result.opportunities[0]
     assert opportunity.routes.buy_route.provider_id is ProviderId.ONEINCH
     assert opportunity.routes.sell_route.provider_id is ProviderId.ZERO_X
@@ -199,14 +195,14 @@ async def test_disabled_provider_is_not_requested(database: Database, clock: Fak
     }
     harness = build_harness(configuration, database, clock, adapters=adapters)
 
-    result = await harness.scanner.scan()
+    result = (await harness.scanner.scan_all())[0]
     assert harness.adapters[ProviderId.VELORA].quote_calls == []
     assert result.opportunities[0].buy_provider_id is ProviderId.ONEINCH
 
 
 async def test_disabled_token_is_not_scanned(harness: Level1Harness) -> None:
     """Отключённый токен не сканируется (§70)."""
-    await harness.scanner.scan()
+    await harness.scanner.scan_all()
     scanned = {
         call.output_token.symbol
         for adapter in harness.adapters.values()
@@ -221,8 +217,7 @@ async def test_unsupported_capability_blocks_the_request(harness: Level1Harness)
     await mark_unsupported(
         harness.capabilities, ProviderId.ONEINCH, CapabilityOperation.QUOTE_BUY, f.AAVE
     )
-    result = await harness.scanner.scan()
-
+    result = (await harness.scanner.scan_all())[0]
     buy_calls = [
         call
         for call in harness.adapters[ProviderId.ONEINCH].quote_calls
@@ -236,7 +231,7 @@ async def test_unknown_capability_still_allows_a_runtime_check(
     harness: Level1Harness,
 ) -> None:
     """UNKNOWN не приравнивается к UNSUPPORTED (§16)."""
-    result = await harness.scanner.scan()
+    result = (await harness.scanner.scan_all())[0]
     assert harness.adapters[ProviderId.ONEINCH].quote_calls
     assert result.opportunities
 
@@ -255,8 +250,7 @@ async def test_runtime_check_of_unknown_cannot_be_disabled(
     assert not hasattr(Level1Config(), "allow_unknown_capability")
 
     harness = build_harness(configured(), database, clock)
-    result = await harness.scanner.scan()
-
+    result = (await harness.scanner.scan_all())[0]
     assert result.opportunities
     assert any(adapter.quote_calls for adapter in harness.adapters.values())
 
@@ -279,7 +273,7 @@ async def test_same_provider_pair_is_rejected_by_default(
     }
     harness = build_harness(configured(), database, clock, adapters=adapters)
 
-    result = await harness.scanner.scan()
+    result = (await harness.scanner.scan_all())[0]
     assert result.opportunities == ()
     assert not harness.configuration.routes.allow_same_provider
 
@@ -298,8 +292,7 @@ async def test_candidate_below_threshold_is_dropped(database: Database, clock: F
         ),
     }
     harness = build_harness(configured(), database, clock, adapters=adapters)
-    result = await harness.scanner.scan()
-
+    result = (await harness.scanner.scan_all())[0]
     assert result.opportunities == ()
     assert harness.dispatcher.submitted == []
 
@@ -309,8 +302,7 @@ async def test_unknown_gas_blocks_opportunity_creation(
 ) -> None:
     """Неизвестный обязательный расход не считается нулём (§50)."""
     harness = build_harness(configured(), database, clock, gas=StaticGasSource(f.unknown_gas()))
-    result = await harness.scanner.scan()
-
+    result = (await harness.scanner.scan_all())[0]
     assert result.opportunities == ()
 
 
@@ -319,8 +311,7 @@ async def test_missing_conversion_rate_blocks_opportunity(
 ) -> None:
     """Без курса стоимость газа неизвестна, а не равна нулю."""
     harness = build_harness(configured(), database, clock, rates=StaticRateSource(None))
-    result = await harness.scanner.scan()
-
+    result = (await harness.scanner.scan_all())[0]
     assert result.opportunities == ()
 
 
@@ -332,21 +323,20 @@ async def test_unknown_fee_blocks_opportunity(database: Database, clock: FakeClo
         clock,
         fees=StaticFeeSource(fees=(f.unknown_fee(),)),
     )
-    result = await harness.scanner.scan()
-
+    result = (await harness.scanner.scan_all())[0]
     assert result.opportunities == ()
 
 
 async def test_fees_are_requested_for_both_legs(harness: Level1Harness) -> None:
     """Комиссии берутся из Fee System для BUY и для SELL (§29-30)."""
-    await harness.scanner.scan()
+    await harness.scanner.scan_all()
     operations = {context.operation for context in harness.fees.calls}
     assert operations == {OperationType.BUY, OperationType.SELL}
 
 
 async def test_gas_estimate_covers_the_whole_round_trip(harness: Level1Harness) -> None:
     """Gas учитывается по обеим ногам (§31, §51)."""
-    await harness.scanner.scan()
+    await harness.scanner.scan_all()
     assert harness.gas.calls
     assert all(units == 400_000 for units in harness.gas.calls if units is not None)
 
@@ -358,9 +348,8 @@ async def test_repeated_scan_is_deduplicated_within_window(
     harness: Level1Harness,
 ) -> None:
     """Тот же кандидат в окне не создаёт вторую Opportunity (§44, §52)."""
-    first = await harness.scanner.scan()
-    second = await harness.scanner.scan()
-
+    first = (await harness.scanner.scan_all())[0]
+    second = (await harness.scanner.scan_all())[0]
     assert len(first.opportunities) == 1
     assert second.opportunities == ()
     assert second.scan.statistics.duplicate_opportunities == 1
@@ -372,16 +361,15 @@ async def test_deduplication_window_expires(database: Database, clock: FakeClock
     harness = build_harness(
         configured(level1={"deduplication_window_seconds": 60}), database, clock
     )
-    await harness.scanner.scan()
+    await harness.scanner.scan_all()
     clock.advance(timedelta(seconds=120))
-    second = await harness.scanner.scan()
-
+    second = (await harness.scanner.scan_all())[0]
     assert len(second.opportunities) == 1
 
 
 async def test_fingerprint_is_deterministic(harness: Level1Harness) -> None:
     """Отпечаток не зависит от случайного идентификатора (§53)."""
-    result = await harness.scanner.scan()
+    result = (await harness.scanner.scan_all())[0]
     opportunity = result.opportunities[0]
     assert len(str(opportunity.fingerprint)) == 64
     assert (
@@ -400,8 +388,7 @@ async def test_backpressure_limits_created_opportunities(
     harness = build_harness(
         configured(), database, clock, dispatcher=RecordingDispatcher(capacity=0)
     )
-    result = await harness.scanner.scan()
-
+    result = (await harness.scanner.scan_all())[0]
     assert result.opportunities == ()
     assert harness.dispatcher.submitted == []
 
@@ -409,7 +396,7 @@ async def test_backpressure_limits_created_opportunities(
 async def test_per_scan_limit_is_respected(database: Database, clock: FakeClock) -> None:
     """Лимит на цикл ограничивает число созданных Opportunity (§48)."""
     harness = build_harness(configured(level1={"max_opportunities_per_scan": 1}), database, clock)
-    result = await harness.scanner.scan()
+    result = (await harness.scanner.scan_all())[0]
     assert len(result.opportunities) <= 1
 
 
@@ -429,8 +416,7 @@ async def test_provider_failure_does_not_stop_the_scan(
         ),
     }
     harness = build_harness(configured(), database, clock, adapters=adapters)
-    result = await harness.scanner.scan()
-
+    result = (await harness.scanner.scan_all())[0]
     assert result.status is ScanStatus.PARTIAL
     assert result.failures
     assert result.opportunities == ()
@@ -447,8 +433,7 @@ async def test_rate_limit_does_not_create_false_opportunity(
         ),
     }
     harness = build_harness(configured(), database, clock, adapters=adapters)
-    result = await harness.scanner.scan()
-
+    result = (await harness.scanner.scan_all())[0]
     assert result.opportunities == ()
     assert any(attempt.error_message == "429" for attempt in result.failures)
 
@@ -462,8 +447,7 @@ async def test_zero_output_quote_is_rejected(database: Database, clock: FakeCloc
         ),
     }
     harness = build_harness(configured(), database, clock, adapters=adapters)
-    result = await harness.scanner.scan()
-
+    result = (await harness.scanner.scan_all())[0]
     assert result.opportunities == ()
     assert any(
         attempt.rejection_reason == "quote output amount is zero" for attempt in result.failures
@@ -485,8 +469,7 @@ async def test_stale_quote_is_rejected(database: Database, clock: FakeClock) -> 
         configured(level1={"quote_max_age_seconds": 5}), database, clock, adapters=adapters
     )
     clock.advance(timedelta(seconds=60))
-    result = await harness.scanner.scan()
-
+    result = (await harness.scanner.scan_all())[0]
     assert result.opportunities == ()
     assert any(
         attempt.rejection_reason == "quote is not fresh enough for this scan"
@@ -499,7 +482,7 @@ async def test_stale_quote_is_rejected(database: Database, clock: FakeClock) -> 
 
 async def test_cancelled_scan_is_not_complete(harness: Level1Harness) -> None:
     """Отменённый цикл не считается успешным (§67)."""
-    task = asyncio.ensure_future(harness.scanner.scan())
+    task = asyncio.ensure_future(harness.scanner.scan(harness.scanner.scopes()[0]))
     await asyncio.sleep(0)
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
@@ -514,7 +497,7 @@ async def test_cancelled_scan_is_not_complete(harness: Level1Harness) -> None:
 
 async def test_opportunity_and_job_expire(harness: Level1Harness) -> None:
     """Opportunity и Job имеют срок жизни (§86, ``02`` §41)."""
-    result = await harness.scanner.scan()
+    result = (await harness.scanner.scan_all())[0]
     opportunity = result.opportunities[0]
     _, job = harness.dispatcher.submitted[0]
 
@@ -541,7 +524,7 @@ class TestBlockedByUnknownCost:
         # Курс native token недоступен: расход газа посчитать не из чего.
         harness = build_harness(configuration, database, clock, rates=StaticRateSource(rate=None))
 
-        statistics = (await harness.scanner.scan()).scan.statistics
+        statistics = (await harness.scanner.scan_all())[0].scan.statistics
 
         assert statistics.blocked_by_unknown_cost > 0
         assert any("gas" in label for label in statistics.unknown_cost_components)
@@ -550,7 +533,7 @@ class TestBlockedByUnknownCost:
         self, harness: Level1Harness
     ) -> None:
         """Когда все расходы известны, счётчик пуст."""
-        statistics = (await harness.scanner.scan()).scan.statistics
+        statistics = (await harness.scanner.scan_all())[0].scan.statistics
 
         assert statistics.blocked_by_unknown_cost == 0
         assert statistics.unknown_cost_components == ()
@@ -576,7 +559,7 @@ class TestProviderSchedule:
     ) -> tuple[str, ...]:
         configuration = parse_configuration(document, environ=dict(VALID_ENV)).config
         harness = build_harness(configuration, database, clock)
-        result = await harness.scanner.scan()
+        result = (await harness.scanner.scan_all())[0]
         return tuple(provider.value for provider in result.scan.scope.providers)
 
     async def test_provider_outside_its_window_is_not_scanned(
@@ -658,7 +641,7 @@ class TestHonestCounters:
         }
         harness = build_harness(configuration, database, clock, adapters=adapters)
 
-        statistics = (await harness.scanner.scan()).scan.statistics
+        statistics = (await harness.scanner.scan_all())[0].scan.statistics
 
         assert statistics.refused_requests > 0
         assert statistics.failed_quotes == 0
@@ -683,7 +666,7 @@ class TestHonestCounters:
         }
         harness = build_harness(configuration, database, clock, adapters=adapters)
 
-        statistics = (await harness.scanner.scan()).scan.statistics
+        statistics = (await harness.scanner.scan_all())[0].scan.statistics
 
         assert statistics.failed_quotes > 0
         assert statistics.refused_requests == 0
@@ -705,7 +688,7 @@ class TestHonestCounters:
         }
         harness = build_harness(configuration, database, clock, adapters=adapters)
 
-        assert (await harness.scanner.scan()).scan.status is ScanStatus.PARTIAL
+        assert (await harness.scanner.scan_all())[0].scan.status is ScanStatus.PARTIAL
 
 
 class TestBestCombination:
@@ -730,8 +713,7 @@ class TestBestCombination:
         configuration = parse_configuration(document, environ=dict(VALID_ENV)).config
         harness = build_harness(configuration, database, clock)
 
-        result = await harness.scanner.scan()
-
+        result = (await harness.scanner.scan_all())[0]
         assert result.opportunities == ()
         statistics = result.scan.statistics
         assert statistics.evaluated_combinations > 0
@@ -739,8 +721,7 @@ class TestBestCombination:
 
     async def test_best_names_the_combination(self, harness: Level1Harness) -> None:
         """Доходность без указания комбинации бесполезна."""
-        result = await harness.scanner.scan()
-
+        result = (await harness.scanner.scan_all())[0]
         best = result.scan.statistics.best_combination
         assert best is not None
         assert best.buy_provider in harness.adapters
@@ -749,8 +730,7 @@ class TestBestCombination:
 
     async def test_best_is_the_maximum(self, harness: Level1Harness) -> None:
         """Записывается именно лучшая, а не первая попавшаяся."""
-        result = await harness.scanner.scan()
-
+        result = (await harness.scanner.scan_all())[0]
         best = result.scan.statistics.best_combination
         assert best is not None
         assert result.scan.statistics.evaluated_combinations >= 1
@@ -780,7 +760,7 @@ class TestBestCombination:
         configuration = parse_configuration(document, environ=dict(VALID_ENV)).config
         harness = build_harness(configuration, database, clock)
 
-        statistics = (await harness.scanner.scan()).scan.statistics
+        statistics = (await harness.scanner.scan_all())[0].scan.statistics
 
         best_volatile = statistics.best_volatile_combination
         assert best_volatile is not None
@@ -792,14 +772,13 @@ class TestBestCombination:
         self, harness: Level1Harness
     ) -> None:
         """Без стабильных токенов отбирать нечего: значения совпадают."""
-        statistics = (await harness.scanner.scan()).scan.statistics
+        statistics = (await harness.scanner.scan_all())[0].scan.statistics
 
         assert statistics.best_volatile_combination == statistics.best_combination
 
     async def test_counter_ignores_incomplete_calculations(self, harness: Level1Harness) -> None:
         """Незавершённый расчёт в сравнении не участвует."""
-        result = await harness.scanner.scan()
-
+        result = (await harness.scanner.scan_all())[0]
         statistics = result.scan.statistics
         assert statistics.evaluated_combinations <= statistics.successful_quotes
 
@@ -840,9 +819,10 @@ class TestStableScan:
     ) -> None:
         harness = self._builder(self._document(), database, clock)
 
-        scope = harness.scanner.stable_scope()
+        scopes = harness.scanner.stable_scopes()
 
-        assert scope is not None
+        assert len(scopes) == 1
+        scope = scopes[0]
         symbols = {harness.tokens.require(key).symbol for key in scope.tokens}
         assert symbols == {"USDC"}
 
@@ -856,9 +836,10 @@ class TestStableScan:
                 provider["fast_scan"] = False
         harness = self._builder(document, database, clock)
 
-        scope = harness.scanner.stable_scope()
+        scopes = harness.scanner.stable_scopes()
 
-        assert scope is not None
+        assert len(scopes) == 1
+        scope = scopes[0]
         assert ProviderId.ZERO_X not in scope.providers
         assert ProviderId.ONEINCH in scope.providers
 
@@ -868,7 +849,7 @@ class TestStableScan:
         """Пустой цикл не создаётся: он только засорял бы историю."""
         harness = self._builder(level1_document(), database, clock)
 
-        assert harness.scanner.stable_scope() is None
+        assert harness.scanner.stable_scopes() == ()
 
     async def test_without_participating_providers_there_is_no_scope(
         self, database: Database, clock: FakeClock
@@ -878,15 +859,16 @@ class TestStableScan:
             provider["fast_scan"] = False
         harness = self._builder(document, database, clock)
 
-        assert harness.scanner.stable_scope() is None
+        assert harness.scanner.stable_scopes() == ()
 
     async def test_fast_scan_runs_the_same_level1(
         self, database: Database, clock: FakeClock
     ) -> None:
         """Второй реализации сканера не создаётся: тот же цикл, другой scope."""
         harness = self._builder(self._document(), database, clock)
-        scope = harness.scanner.stable_scope()
-        assert scope is not None
+        scopes = harness.scanner.stable_scopes()
+        assert len(scopes) == 1
+        scope = scopes[0]
 
         result = await harness.scanner.scan(scope)
 
@@ -909,9 +891,7 @@ class TestStableThreshold:
             "final_threshold_percent": "0.05",
             "stable_threshold_percent": "0.01",
         }
-        profitability = parse_configuration(
-            document, environ=dict(VALID_ENV)
-        ).config.profitability
+        profitability = parse_configuration(document, environ=dict(VALID_ENV)).config.profitability
 
         assert profitability.threshold_for(stable=True, final=False) == Decimal("0.01")
         assert profitability.threshold_for(stable=True, final=True) == Decimal("0.01")
@@ -923,9 +903,7 @@ class TestStableThreshold:
             "final_threshold_percent": "0.08",
             "stable_threshold_percent": "0.01",
         }
-        profitability = parse_configuration(
-            document, environ=dict(VALID_ENV)
-        ).config.profitability
+        profitability = parse_configuration(document, environ=dict(VALID_ENV)).config.profitability
 
         assert profitability.threshold_for(stable=False, final=False) == Decimal("0.05")
         assert profitability.threshold_for(stable=False, final=True) == Decimal("0.08")
@@ -937,9 +915,7 @@ class TestStableThreshold:
             "preliminary_threshold_percent": "0.05",
             "final_threshold_percent": "0.05",
         }
-        profitability = parse_configuration(
-            document, environ=dict(VALID_ENV)
-        ).config.profitability
+        profitability = parse_configuration(document, environ=dict(VALID_ENV)).config.profitability
 
         assert profitability.threshold_for(stable=True, final=False) == Decimal("0.05")
 
@@ -959,8 +935,7 @@ class TestStableThreshold:
         configuration = parse_configuration(document, environ=dict(VALID_ENV)).config
         harness = build_harness(configuration, database, clock)
 
-        result = await harness.scanner.scan()
-
+        result = (await harness.scanner.scan_all())[0]
         # Общий порог недостижим, стабильный — достижим: значит для этой
         # пары применён именно стабильный.
         assert result.opportunities

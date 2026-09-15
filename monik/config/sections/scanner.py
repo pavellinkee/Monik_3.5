@@ -9,7 +9,6 @@ from pydantic import Field, model_validator
 
 from monik.config.base import ConfigSection
 from monik.domain.enums.scheduler import OverlapPolicy
-from monik.domain.value_objects.identity import NetworkId, TokenAddress
 from monik.domain.value_objects.numeric import PositiveDecimal
 
 __all__ = [
@@ -141,8 +140,13 @@ class ScannerConfig(ConfigSection):
     произвольно и задаётся оператором.
     """
 
-    base_network: NetworkId
-    base_token_address: TokenAddress
+    #: Сканируемые сети и базовый токен каждой из них задаются в разделе
+    #: ``networks``: круг всегда замыкается внутри одной сети, а базовый
+    #: токен — её свойство (``17_CONFIGURATION.md`` §24). Отдельной
+    #: настройки «базовая сеть» у сканера нет: сканируются все включённые
+    #: сети, и сеть выключается собственным флагом ``enabled``
+    #: (``02_LEVEL1_SCANNER.md`` §72).
+    #:
     #: Суммы, которыми Level 2 проверяет найденную возможность.
     amounts: tuple[PositiveDecimal, ...] = Field(min_length=1)
     level1: Level1Config = Level1Config()

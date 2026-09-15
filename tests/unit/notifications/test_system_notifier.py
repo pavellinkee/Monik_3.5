@@ -111,7 +111,7 @@ def _summary(**overrides: object) -> StartupSummary:
         "kind": StartupKind.INITIAL,
         "version": "0.1.0",
         "environment": "production",
-        "network": "polygon",
+        "networks": ("polygon",),
         "providers": ("oneinch", "zero_x"),
         "health": _health(),
     }

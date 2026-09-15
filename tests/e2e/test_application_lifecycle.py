@@ -219,7 +219,7 @@ async def test_full_cycle_creates_opportunity_and_notification(
     )
     try:
         await app.startup()
-        result = await app.container.level1.scan()
+        result = (await app.container.level1.scan_all())[0]
         assert result.opportunities
 
         confirmations = await app.container.level2_worker.drain()
@@ -262,7 +262,7 @@ async def test_interrupted_job_is_requeued(tmp_path: pathlib.Path, clock: FakeCl
 
     first, database = await create_application(loaded, clock=clock, adapters=fake_adapters(clock))
     await first.startup()
-    result = await first.container.level1.scan()
+    result = (await first.container.level1.scan_all())[0]
     opportunity = result.opportunities[0]
     job = await first.container.repositories.jobs.get_by_opportunity(opportunity.opportunity_id)
     assert job is not None
@@ -293,7 +293,7 @@ async def test_expired_job_is_not_requeued(tmp_path: pathlib.Path, clock: FakeCl
 
     first, database = await create_application(loaded, clock=clock, adapters=fake_adapters(clock))
     await first.startup()
-    result = await first.container.level1.scan()
+    result = (await first.container.level1.scan_all())[0]
     job = await first.container.repositories.jobs.get_by_opportunity(
         result.opportunities[0].opportunity_id
     )
@@ -336,7 +336,7 @@ async def test_interrupted_notification_is_requeued(
 
     first, database = await create_application(loaded, clock=clock, adapters=fake_adapters(clock))
     await first.startup()
-    result = await first.container.level1.scan()
+    result = (await first.container.level1.scan_all())[0]
     confirmations = await first.container.level2_worker.drain()
     outcome = await first.container.opportunities.record_confirmation(
         result.opportunities[0], confirmations[0]

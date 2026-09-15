@@ -45,8 +45,7 @@ async def test_level1_records_scan_metrics(database: Database, clock: FakeClock)
     metrics = MetricsRegistry()
     harness = build_harness(configured(), database, clock, metrics=metrics)
 
-    result = await harness.scanner.scan()
-
+    result = (await harness.scanner.scan_all())[0]
     assert metrics.counter(names.LEVEL1_SCANS, status=result.status.value) == 1
     assert metrics.counter(names.LEVEL1_QUOTE_REQUESTS, status="total") > 0
     assert metrics.counter(names.LEVEL1_OPPORTUNITIES, status="created") == 1

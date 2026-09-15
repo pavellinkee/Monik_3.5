@@ -204,7 +204,7 @@ async def test_successful_scans_do_not_create_notifications(
         await app.startup()
         baseline = len(transport.sent)
         for _ in range(5):
-            await app.container.level1.scan()
+            await app.container.level1.scan_all()
             await app.container.system_notifier.notify_health(  # type: ignore[union-attr]
                 app.container.health.application_health()
             )

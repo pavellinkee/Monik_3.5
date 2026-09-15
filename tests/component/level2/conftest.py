@@ -109,7 +109,7 @@ async def build_level2(
         adapters=level1_adapter_set or level1_adapters(clock),
         metrics=metrics,
     )
-    scan = await level1.scanner.scan()
+    scan = (await level1.scanner.scan_all())[0]
     assert scan.opportunities, "фикстуре нужна созданная Level 1 возможность"
     opportunity, job = level1.dispatcher.submitted[0]
 

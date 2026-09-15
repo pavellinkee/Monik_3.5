@@ -53,7 +53,7 @@ class TestAggregatorQuoteProvider:
 
         clock = FakeClock(f.NOW)
         adapter = FakeAdapter(ProviderId.ONEINCH, clock, rate=Decimal("0.5"))
-        provider = AggregatorQuotePriceProvider(adapter, clock, probe_amount_raw=10**18)
+        provider = AggregatorQuotePriceProvider(adapter, clock, probe_tokens=1)
         rate = await provider.rate(f.WMATIC, f.USDT)
         assert rate is not None
         assert rate.rate == Decimal("0.5")
@@ -64,7 +64,7 @@ class TestAggregatorQuoteProvider:
 
         clock = FakeClock(f.NOW)
         adapter = FakeAdapter(ProviderId.ONEINCH, clock, error=ProviderError("unavailable"))
-        provider = AggregatorQuotePriceProvider(adapter, clock, probe_amount_raw=10**18)
+        provider = AggregatorQuotePriceProvider(adapter, clock, probe_tokens=1)
         assert await provider.rate(f.WMATIC, f.USDT) is None
 
     def test_probe_amount_must_be_positive(self) -> None:
@@ -74,7 +74,7 @@ class TestAggregatorQuoteProvider:
         clock = FakeClock(f.NOW)
         with pytest.raises(ValueError, match="must be positive"):
             AggregatorQuotePriceProvider(
-                FakeAdapter(ProviderId.ONEINCH, clock), clock, probe_amount_raw=0
+                FakeAdapter(ProviderId.ONEINCH, clock), clock, probe_tokens=0
             )
 
 

@@ -88,12 +88,12 @@ class TestTokenRegistry:
 
     def test_scan_tokens_exclude_base_token(self, configuration: Configuration) -> None:
         registry = TokenRegistry(configuration)
-        assert registry.base_token.symbol == "USDT"
-        assert all(token.symbol != "USDT" for token in registry.scan_tokens())
+        assert registry.base_token(POLYGON).symbol == "USDT"
+        assert all(token.symbol != "USDT" for token in registry.scan_tokens(POLYGON))
 
     def test_scan_tokens_are_ordered_by_rank(self, configuration: Configuration) -> None:
         registry = TokenRegistry(configuration)
-        assert [token.symbol for token in registry.scan_tokens()] == ["AAVE", "WETH"]
+        assert [token.symbol for token in registry.scan_tokens(POLYGON)] == ["AAVE", "WETH"]
 
     def test_scan_tokens_respect_top_n(self) -> None:
         """Ограничение Top-N (01 §7)."""
@@ -101,7 +101,7 @@ class TestTokenRegistry:
         document["scanner"]["level1"] = {"top_tokens": 1}
         config = parse_configuration(document, environ=dict(VALID_ENV)).config
         registry = TokenRegistry(config)
-        assert [token.symbol for token in registry.scan_tokens()] == ["AAVE"]
+        assert [token.symbol for token in registry.scan_tokens(POLYGON)] == ["AAVE"]
 
     def test_registry_has_no_hardcoded_tokens(self) -> None:
         """Собственного списка токенов у реестра нет (10 §4)."""

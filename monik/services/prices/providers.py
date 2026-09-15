@@ -94,14 +94,18 @@ class AggregatorQuotePriceProvider:
         adapter: AggregatorAdapter,
         clock: Clock,
         *,
-        probe_amount_raw: int,
+        probe_tokens: int = 1,
         ttl_seconds: int = 300,
     ) -> None:
-        if probe_amount_raw <= 0:
+        if probe_tokens <= 0:
             raise ValueError("probe amount must be positive")
         self._adapter = adapter
         self._clock = clock
-        self._probe_amount_raw = probe_amount_raw
+        #: Пробная сумма в **целых токенах**, а не в base units. Знаки
+        #: берутся у самого токена в момент запроса: одно и то же число
+        #: base units означает разные суммы в разных сетях, и жёсткое
+        #: значение пришлось бы привязывать к одной из них.
+        self._probe_tokens = probe_tokens
         self._ttl = timedelta(seconds=ttl_seconds)
 
     async def rate(self, from_token: Token, to_token: Token) -> ConversionRate | None:
@@ -111,7 +115,7 @@ class AggregatorQuotePriceProvider:
             operation=OperationType.SELL,
             input_token=from_token,
             output_token=to_token,
-            input_amount=from_token.amount_from_base_units(self._probe_amount_raw),
+            input_amount=from_token.amount_from_decimal(str(self._probe_tokens)),
             request_id=RequestId.generate(),
             priority=RequestPriority.MAINTENANCE,
         )

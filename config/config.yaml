@@ -15,6 +15,11 @@ application:
   timezone: "Europe/Lisbon"
   shutdown_timeout_seconds: 30
 
+# Сети. Круг всегда замыкается внутри одной сети: межсетевых сделок
+# сканер не рассматривает (10_LEVEL_1_SCANNER.md §38). Поэтому базовый
+# токен round-trip задаётся здесь, у сети, а не общей настройкой сканера.
+# Сеть выключается собственным флагом enabled — тогда она не участвует в
+# сканировании вовсе (02_LEVEL1_SCANNER.md §72).
 networks:
   - network_id: polygon
     name: Polygon
@@ -22,9 +27,24 @@ networks:
     native_token_symbol: POL
     native_token_decimals: 18
     wrapped_native_address: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270"
+    # Базовый токен круга этой сети: вход и выход цикла.
+    base_token_address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F"
     rpc_url: "https://polygon-bor-rpc.publicnode.com"
     # Значок сети в уведомлении Telegram.
     emoji: "⛓️"
+    enabled: true
+
+  - network_id: arbitrum
+    name: Arbitrum
+    chain_id: 42161
+    native_token_symbol: ETH
+    native_token_decimals: 18
+    wrapped_native_address: "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1"
+    # USDT на Arbitrum. Адрес другой, чем на Polygon: одинаковый символ
+    # не означает одинаковый контракт (01_PROJECT_REQUIREMENTS.md §11).
+    base_token_address: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9"
+    rpc_url: "https://arbitrum-one-rpc.publicnode.com"
+    emoji: "🔷"
     enabled: true
 
 # Провайдер включается только вместе с заданной переменной окружения
@@ -87,6 +107,10 @@ providers:
     # В учащённом проходе не участвует: при интервале 30 секунд он один
     # стоил бы 8640 запросов за окно при квоте 5000 в сутки.
     fast_scan: false
+    # Только Polygon. API Velora работает и на Arbitrum, но суточная
+    # квота бесплатного тарифа — 5000 запросов, а один Polygon уже
+    # расходует около 44 за цикл. Вторая сеть удвоила бы расход без
+    # запаса. Включение — одной строкой, когда появится платный тариф.
     supported_networks: [polygon]
 
   - provider_id: kyberswap
@@ -109,7 +133,12 @@ providers:
     schedule:
       start: "04:00"
       end: "23:00"
-    supported_networks: [polygon]
+    supported_networks: [polygon, arbitrum]
+    # Сеть зашита в адрес страницы обмена, поэтому общая ссылка привела
+    # бы оператора не в ту сеть.
+    ui_urls:
+      polygon: "https://kyberswap.com/swap/polygon"
+      arbitrum: "https://kyberswap.com/swap/arbitrum"
 
   - provider_id: uniswap
     enabled: true
@@ -124,7 +153,10 @@ providers:
     schedule:
       start: "04:00"
       end: "23:00"
-    supported_networks: [polygon]
+    supported_networks: [polygon, arbitrum]
+    ui_urls:
+      polygon: "https://app.uniswap.org/swap?chain=polygon"
+      arbitrum: "https://app.uniswap.org/swap?chain=arbitrum"
     options:
       swapper: "0x4745ab81B8FD8C9ea6Af85980eEC6F23865576aB"
 
@@ -246,6 +278,67 @@ tokens:
     decimals: 9
     rank: 33
 
+  # --- Arbitrum -------------------------------------------------------
+  #
+  # Набор собран по замеру круга USDT → X → USDT 15.09 на суммах от 1000
+  # до 10000 USDT. Отличие сети от Polygon в том, что у мажоров стоимость
+  # круга не растёт вместе с суммой: WETH на 10000 стоит 0,027 % против
+  # 0,066 % на Polygon, WBTC — 0,035 % против 0,102 %. Адреса и знаки
+  # сверены вызовом decimals()/symbol() у контрактов сети.
+  - network_id: arbitrum
+    address: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9"
+    symbol: USDT
+    decimals: 6
+    usd_stable: true
+    rank: 1
+
+  - network_id: arbitrum
+    address: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"
+    symbol: USDC
+    decimals: 6
+    usd_stable: true
+    rank: 2
+
+  - network_id: arbitrum
+    # Мостовой USDC. Контракт в сети отвечает символом USDC — это
+    # косметическое расхождение: идентичность задаёт адрес.
+    address: "0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8"
+    symbol: USDC.e
+    decimals: 6
+    usd_stable: true
+    rank: 3
+
+  - network_id: arbitrum
+    address: "0xDA10009cBd5D07dd0CeCc66161FC93D7c9000da1"
+    symbol: DAI
+    decimals: 18
+    usd_stable: true
+    rank: 4
+
+  - network_id: arbitrum
+    address: "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1"
+    symbol: WETH
+    decimals: 18
+    rank: 5
+
+  - network_id: arbitrum
+    address: "0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f"
+    symbol: WBTC
+    decimals: 8
+    rank: 6
+
+  - network_id: arbitrum
+    address: "0x912CE59144191C1204E64559FE8253a0e49E6548"
+    symbol: ARB
+    decimals: 18
+    rank: 7
+
+  - network_id: arbitrum
+    address: "0xf97f4df75117a78c1A5a0DBb814Af92458539FB4"
+    symbol: LINK
+    decimals: 18
+    rank: 8
+
 routes:
   # Покупка и продажа у одного агрегатора. Архитектура это допускает при
   # явном разрешении (02_LEVEL1_SCANNER.md §18); основной моделью остаётся
@@ -257,8 +350,8 @@ routes:
   max_route_steps: 4
 
 scanner:
-  base_network: polygon
-  base_token_address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F"
+  # Сканируемые сети и базовый токен каждой из них заданы в разделе
+  # networks: сканируются все включённые сети, каждая своим циклом.
   # Суммы задаются только конфигурацией (01_PROJECT_REQUIREMENTS.md §22).
   # Суммы, которыми Level 2 проверяет найденную возможность. Их число
   # произвольно и на стоимость поиска не влияет.
