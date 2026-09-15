@@ -116,9 +116,7 @@ providers:
     supported_networks: [polygon]
 
   - provider_id: kyberswap
-    # Выключен по решению оператора 15.09: в работе остаётся только
-    # Uniswap. Возврат — одной строкой.
-    enabled: false
+    enabled: true
     emoji: "🖲️"
     ui_url: "https://kyberswap.com/swap/"
     # Покупка и продажа у этого агрегатора. Разрешение двухуровневое:
@@ -145,7 +143,9 @@ providers:
       arbitrum: "https://kyberswap.com/swap/arbitrum"
 
   - provider_id: uniswap
-    enabled: true
+    # Выключен по решению оператора 15.09: в работе остаётся только
+    # KyberSwap. Возврат — одной строкой.
+    enabled: false
     emoji: "🧩"
     ui_url: "https://app.uniswap.org/swap"
     # Покупка и продажа у этого агрегатора. Разрешение двухуровневое:
