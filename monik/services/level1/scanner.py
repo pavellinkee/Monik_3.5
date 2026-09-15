@@ -82,6 +82,14 @@ class Level1Scanner:
         self._clock = clock
         self._metrics = metrics
 
+    def stable_scope(self) -> ScanScope | None:
+        """Границы учащённого прохода по стабильным токенам.
+
+        ``None`` означает, что проходу не с чем работать: решение
+        принимает вызывающая сторона, а пустой цикл не создаётся.
+        """
+        return self._scope_builder.build_stable()
+
     def has_active_providers(self) -> bool:
         """Есть ли сейчас провайдер в своём рабочем окне.
 

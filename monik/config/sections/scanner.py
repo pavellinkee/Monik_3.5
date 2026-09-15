@@ -12,7 +12,13 @@ from monik.domain.enums.scheduler import OverlapPolicy
 from monik.domain.value_objects.identity import NetworkId, TokenAddress
 from monik.domain.value_objects.numeric import PositiveDecimal
 
-__all__ = ["Level1Config", "Level2Config", "NoRouteMemoryConfig", "ScannerConfig"]
+__all__ = [
+    "Level1Config",
+    "Level2Config",
+    "NoRouteMemoryConfig",
+    "ScannerConfig",
+    "StableScanConfig",
+]
 
 
 class NoRouteMemoryConfig(ConfigSection):
@@ -29,6 +35,23 @@ class NoRouteMemoryConfig(ConfigSection):
     failure_threshold: int = Field(default=3, ge=1, le=100)
     #: Через сколько часов комбинация проверяется снова.
     recheck_after_hours: int = Field(default=24, ge=1, le=8760)
+
+
+class StableScanConfig(ConfigSection):
+    """Учащённый проход по стабильным токенам.
+
+    Стоимость круга между стабильными токенами почти нулевая — по
+    измерению 0,0013 % против 0,065 % у WETH, — поэтому прибыльным
+    становится любое заметное отклонение от паритета. Но живёт такое
+    отклонение минуты, и десятиминутный цикл его не застаёт.
+
+    Поэтому стабильные токены опрашиваются отдельным, частым проходом.
+    Набор определяется меткой ``usd_stable`` у токена, а не списком имён:
+    новый стабильный токен попадает в проход, как только получит метку.
+    """
+
+    enabled: bool = False
+    interval_seconds: int = Field(default=30, ge=5, le=3_600)
 
 
 class Level1Config(ConfigSection):
@@ -52,6 +75,8 @@ class Level1Config(ConfigSection):
     no_route_memory: NoRouteMemoryConfig = NoRouteMemoryConfig()
     scan_timeout_seconds: int = Field(default=240, ge=1, le=86_400)
     top_tokens: int = Field(default=30, ge=1, le=500)
+    #: Отдельный частый проход по стабильным токенам.
+    stable_scan: StableScanConfig = StableScanConfig()
     max_opportunities_per_scan: int = Field(default=50, ge=1, le=1000)
     max_concurrent_requests: int = Field(default=8, ge=1, le=256)
     quote_max_age_seconds: int = Field(default=30, ge=1, le=3600)

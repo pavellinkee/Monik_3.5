@@ -43,6 +43,11 @@ class ProviderRegistry:
             provider.provider_id: (provider.emoji, provider.ui_url)
             for provider in configuration.providers
         }
+        #: Участвует ли провайдер в учащённом проходе. Ограничение
+        #: принадлежит провайдеру: суточную квоту расходует именно он.
+        self._fast_scan = {
+            provider.provider_id: provider.fast_scan for provider in configuration.providers
+        }
         # Часы работы — особенность конкретного провайдера, поэтому она
         # описана у него в конфигурации и превращается здесь в общее
         # понятие «окно». Провайдер без расписания работает круглосуточно.
@@ -82,6 +87,10 @@ class ProviderRegistry:
     def ui_url(self, provider_id: ProviderId) -> str | None:
         """Страница обмена провайдера, если она задана."""
         return self._presentation.get(provider_id, (None, None))[1]
+
+    def participates_in_fast_scan(self, provider_id: ProviderId) -> bool:
+        """Опрашивается ли провайдер в учащённом проходе."""
+        return self._fast_scan.get(provider_id, True)
 
     def window(self, provider_id: ProviderId) -> DailyWindow | None:
         """Окно работы провайдера, если оно задано."""

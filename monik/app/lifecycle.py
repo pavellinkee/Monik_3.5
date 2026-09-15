@@ -61,6 +61,7 @@ __all__ = [
     "TASK_CAPABILITY_LOAD",
     "TASK_TOKEN_CHECK",
     "TASK_LEVEL1_SCAN",
+    "TASK_LEVEL1_STABLE_SCAN",
     "TASK_NOTIFICATIONS",
     "TASK_BACKUP",
     "TASK_SYSTEM_HEALTH",
@@ -75,6 +76,7 @@ _LOGGER = get_logger("app.lifecycle")
 
 #: Идентификаторы задач планировщика.
 TASK_LEVEL1_SCAN = "level1_scan"
+TASK_LEVEL1_STABLE_SCAN = "level1_stable_scan"
 TASK_NOTIFICATIONS = "notification_delivery"
 TASK_TELEGRAM_COMMANDS = "telegram_commands"
 TASK_CAPABILITY_LOAD = "capability_load"
@@ -90,6 +92,9 @@ _SATURDAY = 6
 #: (``14_SCHEDULER.md`` §58-59).
 _DEFAULT_SCHEDULES: dict[str, TaskScheduleConfig] = {
     TASK_LEVEL1_SCAN: TaskScheduleConfig(mode=TaskMode.INTERVAL, interval_seconds=300),
+    # Учащённый проход по стабильным токенам. Период задаётся настройкой
+    # подсистемы (scanner.level1.stable_scan) и здесь не дублируется.
+    TASK_LEVEL1_STABLE_SCAN: TaskScheduleConfig(mode=TaskMode.INTERVAL, interval_seconds=30),
     TASK_NOTIFICATIONS: TaskScheduleConfig(mode=TaskMode.INTERVAL, interval_seconds=10),
     TASK_TELEGRAM_COMMANDS: TaskScheduleConfig(mode=TaskMode.INTERVAL, interval_seconds=5),
     TASK_CAPABILITY_LOAD: TaskScheduleConfig(mode=TaskMode.STARTUP),
@@ -376,6 +381,15 @@ def build_application(
         priority=RequestPriority.LEVEL1_BUY,
         timeout=timedelta(seconds=config.scanner.level1.scan_timeout_seconds),
     )
+    if config.scanner.level1.stable_scan.enabled:
+        registry.register(
+            TASK_LEVEL1_STABLE_SCAN,
+            _stable_scan_task(container),
+            config=config.scheduler,
+            default=_DEFAULT_SCHEDULES[TASK_LEVEL1_STABLE_SCAN],
+            priority=RequestPriority.LEVEL1_BUY,
+            timeout=timedelta(seconds=config.scanner.level1.scan_timeout_seconds),
+        )
     registry.register(
         TASK_NOTIFICATIONS,
         _notification_task(container),
@@ -550,6 +564,30 @@ def _level1_task(container: Container) -> TaskHandler:
             ApplicationHealthStatus.HEALTHY,
             reason=f"последний цикл {container.clock.now().isoformat(timespec='seconds')}",
         )
+
+    return run
+
+
+def _stable_scan_task(container: Container) -> TaskHandler:
+    """Учащённый проход по стабильным токенам.
+
+    Отдельный проход нужен потому, что стоимость круга между стабильными
+    токенами почти нулевая, и прибыльным становится любое заметное
+    отклонение от паритета — но живёт оно минуты, и обычный цикл его не
+    застаёт.
+
+    Проход выполняет тот же Level 1 с суженным scope: второй реализации
+    сканера не создаётся.
+    """
+
+    async def run() -> None:
+        if not container.control.is_running:
+            return
+        scope = container.level1.stable_scope()
+        if scope is None:
+            # Стабильных токенов нет или ни один провайдер не участвует.
+            return
+        await container.level1.scan(scope)
 
     return run
 

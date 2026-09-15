@@ -91,6 +91,12 @@ class ProviderConfig(ConfigSection):
     #:
     #: ``None`` — круглосуточно.
     schedule: ProviderScheduleConfig | None = None
+    #: Участвует ли провайдер в учащённом проходе по стабильным токенам.
+    #:
+    #: Частый проход стоит сотен запросов в час, и провайдеру с суточной
+    #: квотой он её исчерпывает. Ограничение принадлежит провайдеру,
+    #: поэтому описано здесь, а не в настройках прохода.
+    fast_scan: bool = True
     options: dict[str, str] = Field(default_factory=dict)
 
     @model_validator(mode="after")

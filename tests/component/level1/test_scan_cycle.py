@@ -802,3 +802,93 @@ class TestBestCombination:
 
         statistics = result.scan.statistics
         assert statistics.evaluated_combinations <= statistics.successful_quotes
+
+
+class TestStableScan:
+    """Учащённый проход по стабильным токенам.
+
+    Круг между стабильными токенами стоит почти ничего, поэтому
+    прибыльным становится любое заметное отклонение от паритета. Живёт
+    оно минуты, и обычный десятиминутный цикл его не застаёт.
+    """
+
+    def _document(self, **overrides: Any) -> dict[str, Any]:
+        document = level1_document()
+        for token in document["tokens"]:
+            if token["symbol"] == "USDT":
+                token["usd_stable"] = True
+        document["tokens"].append(
+            {
+                "network_id": "polygon",
+                "address": "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+                "symbol": "USDC",
+                "decimals": 6,
+                "rank": 3,
+                "usd_stable": True,
+            }
+        )
+        document["scanner"].setdefault("level1", {})
+        document["scanner"]["level1"].update(overrides)
+        return document
+
+    def _builder(self, document: dict[str, Any], database: Database, clock: FakeClock):  # noqa: ANN202
+        configuration = parse_configuration(document, environ=dict(VALID_ENV)).config
+        return build_harness(configuration, database, clock)
+
+    async def test_scope_contains_only_stable_tokens(
+        self, database: Database, clock: FakeClock
+    ) -> None:
+        harness = self._builder(self._document(), database, clock)
+
+        scope = harness.scanner.stable_scope()
+
+        assert scope is not None
+        symbols = {harness.tokens.require(key).symbol for key in scope.tokens}
+        assert symbols == {"USDC"}
+
+    async def test_provider_outside_the_fast_scan_is_excluded(
+        self, database: Database, clock: FakeClock
+    ) -> None:
+        """Провайдер с суточной квотой в частый проход не берётся."""
+        document = self._document()
+        for provider in document["providers"]:
+            if provider["provider_id"] == "zero_x":
+                provider["fast_scan"] = False
+        harness = self._builder(document, database, clock)
+
+        scope = harness.scanner.stable_scope()
+
+        assert scope is not None
+        assert ProviderId.ZERO_X not in scope.providers
+        assert ProviderId.ONEINCH in scope.providers
+
+    async def test_without_stable_tokens_there_is_no_scope(
+        self, database: Database, clock: FakeClock
+    ) -> None:
+        """Пустой цикл не создаётся: он только засорял бы историю."""
+        harness = self._builder(level1_document(), database, clock)
+
+        assert harness.scanner.stable_scope() is None
+
+    async def test_without_participating_providers_there_is_no_scope(
+        self, database: Database, clock: FakeClock
+    ) -> None:
+        document = self._document()
+        for provider in document["providers"]:
+            provider["fast_scan"] = False
+        harness = self._builder(document, database, clock)
+
+        assert harness.scanner.stable_scope() is None
+
+    async def test_fast_scan_runs_the_same_level1(
+        self, database: Database, clock: FakeClock
+    ) -> None:
+        """Второй реализации сканера не создаётся: тот же цикл, другой scope."""
+        harness = self._builder(self._document(), database, clock)
+        scope = harness.scanner.stable_scope()
+        assert scope is not None
+
+        result = await harness.scanner.scan(scope)
+
+        assert result.scan.scope.tokens == scope.tokens
+        assert result.scan.statistics.quote_requests > 0

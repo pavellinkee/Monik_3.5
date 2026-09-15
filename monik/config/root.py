@@ -50,6 +50,7 @@ __all__ = ["Configuration"]
 #: здесь; сама настройка остаётся там, где ею управляет оператор.
 _INTERVAL_SOURCES: dict[str, Callable[[Configuration], int]] = {
     "level1_scan": lambda config: config.scanner.level1.interval_seconds,
+    "level1_stable_scan": lambda config: config.scanner.level1.stable_scan.interval_seconds,
 }
 
 

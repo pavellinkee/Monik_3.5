@@ -92,6 +92,36 @@ class ScopeBuilder:
             if self._providers.declares_network(provider.provider_id, network_id)
         )
 
+    def build_stable(self) -> ScanScope | None:
+        """Scope учащённого прохода: только стабильные токены.
+
+        Возвращает ``None``, когда проходу не с чем работать — нет
+        стабильных токенов или ни один провайдер в нём не участвует.
+        Пустой scope создавать нельзя: цикл без источников и без токенов
+        не имеет смысла и только засорял бы историю.
+
+        Набор задаётся меткой ``usd_stable``, а не списком имён: новый
+        стабильный токен попадает в проход, как только получит метку.
+        """
+        scanner = self._configuration.scanner
+        network_id = scanner.base_network
+        providers = tuple(
+            provider_id
+            for provider_id in self.active_providers()
+            if self._providers.participates_in_fast_scan(provider_id)
+        )
+        tokens = tuple(token for token in self.scan_tokens() if token.usd_stable)
+        if not providers or not tokens:
+            return None
+        base_token = self._tokens.base_token
+        raw_amounts = (base_token.amount_from_decimal(str(scanner.level1_amount)).raw,)
+        return ScanScope(
+            networks=(network_id,),
+            providers=providers,
+            tokens=tuple(token.key for token in tokens),
+            raw_amounts=raw_amounts,
+        )
+
     def scan_tokens(self) -> tuple[Token, ...]:
         """Промежуточные токены цикла, ограниченные Top-N (§6)."""
         limit = self._configuration.scanner.level1.top_tokens
