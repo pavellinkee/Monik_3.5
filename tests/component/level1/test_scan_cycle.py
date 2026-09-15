@@ -892,3 +892,75 @@ class TestStableScan:
 
         assert result.scan.scope.tokens == scope.tokens
         assert result.scan.statistics.quote_requests > 0
+
+
+class TestStableThreshold:
+    """Отдельный порог для круга между стабильными токенами.
+
+    Стоимость такого круга почти нулевая, и общий порог отсекал бы ровно
+    те отклонения от паритета, ради которых стабильные пары и
+    опрашиваются часто.
+    """
+
+    def test_stable_pair_uses_its_own_threshold(self) -> None:
+        document = level1_document()
+        document["profitability"] = {
+            "preliminary_threshold_percent": "0.05",
+            "final_threshold_percent": "0.05",
+            "stable_threshold_percent": "0.01",
+        }
+        profitability = parse_configuration(
+            document, environ=dict(VALID_ENV)
+        ).config.profitability
+
+        assert profitability.threshold_for(stable=True, final=False) == Decimal("0.01")
+        assert profitability.threshold_for(stable=True, final=True) == Decimal("0.01")
+
+    def test_volatile_pair_keeps_the_common_threshold(self) -> None:
+        document = level1_document()
+        document["profitability"] = {
+            "preliminary_threshold_percent": "0.05",
+            "final_threshold_percent": "0.08",
+            "stable_threshold_percent": "0.01",
+        }
+        profitability = parse_configuration(
+            document, environ=dict(VALID_ENV)
+        ).config.profitability
+
+        assert profitability.threshold_for(stable=False, final=False) == Decimal("0.05")
+        assert profitability.threshold_for(stable=False, final=True) == Decimal("0.08")
+
+    def test_without_the_setting_nothing_changes(self) -> None:
+        """Без настройки поведение прежнее: один порог на всех."""
+        document = level1_document()
+        document["profitability"] = {
+            "preliminary_threshold_percent": "0.05",
+            "final_threshold_percent": "0.05",
+        }
+        profitability = parse_configuration(
+            document, environ=dict(VALID_ENV)
+        ).config.profitability
+
+        assert profitability.threshold_for(stable=True, final=False) == Decimal("0.05")
+
+    async def test_stable_combination_passes_the_lower_threshold(
+        self, database: Database, clock: FakeClock
+    ) -> None:
+        """Комбинация между двумя стабильными токенами судится мягче."""
+        document = level1_document()
+        for token in document["tokens"]:
+            if token["symbol"] in {"USDT", "AAVE"}:
+                token["usd_stable"] = True
+        document["profitability"] = {
+            "preliminary_threshold_percent": "999",
+            "final_threshold_percent": "999",
+            "stable_threshold_percent": "-100",
+        }
+        configuration = parse_configuration(document, environ=dict(VALID_ENV)).config
+        harness = build_harness(configuration, database, clock)
+
+        result = await harness.scanner.scan()
+
+        # Общий порог недостижим, стабильный — достижим: значит для этой
+        # пары применён именно стабильный.
+        assert result.opportunities
