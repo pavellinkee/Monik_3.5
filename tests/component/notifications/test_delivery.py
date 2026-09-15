@@ -395,9 +395,7 @@ class TestOperatorFormat:
     def _render(self, harness: NotificationHarness) -> str:
         return harness.formatter.render_message(harness.snapshot)
 
-    async def test_provider_links_replace_names(
-        self, database: Database, clock: FakeClock
-    ) -> None:
+    async def test_provider_links_replace_names(self, database: Database, clock: FakeClock) -> None:
         configuration = configured()
         for provider in configuration.providers:
             object.__setattr__(provider, "emoji", "🧩")
@@ -416,9 +414,7 @@ class TestOperatorFormat:
 
         assert harness.snapshot.buy_provider_id.value in text
 
-    async def test_amounts_are_round_and_values_signed(
-        self, harness: NotificationHarness
-    ) -> None:
+    async def test_amounts_are_round_and_values_signed(self, harness: NotificationHarness) -> None:
         text = self._render(harness)
         amount = harness.snapshot.amounts[0]
         assert amount.net_roi is not None
@@ -428,9 +424,7 @@ class TestOperatorFormat:
         assert "." not in label
         assert f"{amount.net_roi.value:+.2f}%" in text
 
-    async def test_best_roi_and_best_profit_are_marked(
-        self, harness: NotificationHarness
-    ) -> None:
+    async def test_best_roi_and_best_profit_are_marked(self, harness: NotificationHarness) -> None:
         """Лучший процент и лучшая прибыль — разные вопросы и разные значки."""
         emoji = harness.configuration.notifications.emoji
         text = self._render(harness)
@@ -470,9 +464,7 @@ class TestOperatorFormat:
             }
         )
 
-    async def test_unconfirmed_amount_keeps_its_numbers(
-        self, harness: NotificationHarness
-    ) -> None:
+    async def test_unconfirmed_amount_keeps_its_numbers(self, harness: NotificationHarness) -> None:
         """Отсутствие подтверждения — повод для пометки, а не для молчания."""
         template = harness.snapshot.amounts[0]
         snapshot = self._with_amounts(
@@ -532,9 +524,7 @@ class TestOperatorFormat:
         assert roi_line.endswith("50 USDT")
         assert profit_line.endswith("1000 USDT")
 
-    async def test_tie_is_marked_on_the_larger_amount(
-        self, harness: NotificationHarness
-    ) -> None:
+    async def test_tie_is_marked_on_the_larger_amount(self, harness: NotificationHarness) -> None:
         """Равные значения: отмечается большая сумма, выбор детерминирован."""
         template = harness.snapshot.amounts[0]
         snapshot = self._with_amounts(

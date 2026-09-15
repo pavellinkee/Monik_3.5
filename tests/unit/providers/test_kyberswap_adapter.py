@@ -99,9 +99,7 @@ class TestErrorForms:
             (4011, "does not know one of the requested tokens"),
         ],
     )
-    async def test_documented_codes_mean_no_route(
-        self, code: int, fragment: str
-    ) -> None:
+    async def test_documented_codes_mean_no_route(self, code: int, fragment: str) -> None:
         adapter = _adapter(_clock(), {"code": code, "message": "route not found"}, status=400)
 
         with pytest.raises(NoRouteError, match=fragment):

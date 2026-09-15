@@ -76,9 +76,7 @@ class OnchainTokenMetadata:
         """Есть ли у сети узел, которому можно задать вопрос."""
         return str(network_id) in self._rpc_urls
 
-    async def metadata(
-        self, network_id: NetworkId, address: TokenAddress
-    ) -> TokenMetadata | None:
+    async def metadata(self, network_id: NetworkId, address: TokenAddress) -> TokenMetadata | None:
         """Свойства контракта или ``None``, если это не токен.
 
         ``None`` означает «по этому адресу нет контракта, отвечающего как

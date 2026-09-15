@@ -51,9 +51,7 @@ class _Chain:
     def supports(self, network_id: NetworkId) -> bool:
         return self._supported
 
-    async def metadata(
-        self, network_id: NetworkId, address: TokenAddress
-    ) -> TokenMetadata | None:
+    async def metadata(self, network_id: NetworkId, address: TokenAddress) -> TokenMetadata | None:
         self.asked.append(str(address).lower())
         if self._error is not None:
             raise self._error
@@ -158,12 +156,7 @@ class TestParsing:
         from monik.services.registries.onchain import _parse_symbol
 
         # Стандартный ответ: смещение, длина, данные.
-        payload = (
-            "0x"
-            + "20".rjust(64, "0")
-            + "4".rjust(64, "0")
-            + b"AAVE".hex().ljust(64, "0")
-        )
+        payload = "0x" + "20".rjust(64, "0") + "4".rjust(64, "0") + b"AAVE".hex().ljust(64, "0")
         assert _parse_symbol(payload) == "AAVE"
 
     def test_symbol_as_bytes32(self) -> None:
