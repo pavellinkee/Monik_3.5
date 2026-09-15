@@ -74,6 +74,7 @@ _NAME_EXCEPTIONS = frozenset(
         "to_token",
         "base_token",
         "scan_tokens",
+        "top_tokens",
         "best_token",
         "best_volatile_token",
         "profit_currency",

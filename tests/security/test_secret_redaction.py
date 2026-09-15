@@ -86,6 +86,23 @@ class TestRedactMapping:
         }
         assert redact_mapping(data) == data
 
+    def test_diagnostic_token_fields_are_preserved(self) -> None:
+        """Символ, адрес и количество токенов — публичные величины.
+
+        Вычёркивание делало диагностику нечитаемой: запись «лучшая
+        комбинация цикла» показывала ``best_token: [REDACTED]``, а запись
+        запуска — ``top_tokens: [REDACTED]``, то есть ровно те значения,
+        ради которых записи и заводились.
+        """
+        data = {
+            "best_token": "polygon:0xabc",
+            "best_volatile_token": "arbitrum:0xdef",
+            "base_token": "0xc2132d05",
+            "scan_tokens": ["USDC", "WETH"],
+            "top_tokens": 30,
+        }
+        assert redact_mapping(data) == data
+
     def test_nested_structures_are_redacted(self, registry: SecretRegistry) -> None:
         data = {
             "provider": {"name": "oneinch", "credentials": {"api_key": API_KEY}},

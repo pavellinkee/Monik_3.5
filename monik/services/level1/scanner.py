@@ -404,6 +404,10 @@ class Level1Scanner:
         _LOGGER.info(
             "level 1 scan finished",
             extra=log_fields(
+                # Сеть цикла. Сетей в работе может быть несколько, и без
+                # этого поля записи разных сетей в журнале неотличимы:
+                # сеть приходилось бы выводить из адреса лучшего токена.
+                network=str(scan.scope.networks[0]),
                 status=status.value,
                 requests=statistics.requests,
                 successful=statistics.successful,

@@ -271,6 +271,26 @@ class TestSweep:
         assert [result.scan.scope.networks[0] for result in results] == [ARBITRUM]
 
 
+class TestCycleRecord:
+    """Запись цикла называет свою сеть."""
+
+    async def test_scan_record_names_its_network(
+        self, database: Database, clock: FakeClock, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Без этого записи разных сетей в журнале неотличимы."""
+        harness = _harness(two_network_document(), database, clock)
+
+        with caplog.at_level("INFO", logger="monik.services.level1.scanner"):
+            await harness.scanner.scan_all()
+
+        networks = [
+            record.monik_fields["network"]
+            for record in caplog.records
+            if record.getMessage() == "level 1 scan finished"
+        ]
+        assert networks == ["polygon", "arbitrum"]
+
+
 class TestConfigurationGuards:
     """Непригодная сеть выключается явно, а не пропускается молча."""
 
