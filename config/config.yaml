@@ -195,18 +195,6 @@ tokens:
     rank: 10
 
   - network_id: polygon
-    address: "0x0b3f868E0BE5597D5DB7fEB59E1CADBb0fdDa50a"
-    symbol: SUSHI
-    decimals: 18
-    rank: 11
-
-  - network_id: polygon
-    address: "0x172370d5Cd63279eFa6d502DAB29171933a610AF"
-    symbol: CRV
-    decimals: 18
-    rank: 12
-
-  - network_id: polygon
     address: "0xc3c7d422809852031b44ab29eec9f1eff2a58756"
     symbol: LDO
     decimals: 18
@@ -217,78 +205,6 @@ tokens:
     symbol: wstETH
     decimals: 18
     rank: 14
-
-  - network_id: polygon
-    address: "0xBbba073C31bF03b8ACf7c28EF0738DeCF3695683"
-    symbol: SAND
-    decimals: 18
-    rank: 15
-
-  - network_id: polygon
-    address: "0x9a71012b13ca4d3d0cdc72a177df3ef03b0e76a3"
-    symbol: BAL
-    decimals: 18
-    rank: 16
-
-  - network_id: polygon
-    address: "0x5fe2b58c013d7601147dcdd68c143a77499f5531"
-    symbol: GRT
-    decimals: 18
-    rank: 17
-
-  - network_id: polygon
-    address: "0x50B728d8D964fd00C2d0AAD81718B71311feF68a"
-    symbol: SNX
-    decimals: 18
-    rank: 18
-
-  - network_id: polygon
-    address: "0x385eeac5cb85a38a9a07a70c73e0a3271cfb54a7"
-    symbol: GHST
-    decimals: 18
-    rank: 19
-
-  - network_id: polygon
-    address: "0xA1c57f48f0Deb89f569DFbe6E2b7f46d33606fD4"
-    symbol: MANA
-    decimals: 18
-    rank: 20
-
-  - network_id: polygon
-    address: "0x6f7C932e7684666C9fd1d44527765433e01fF61d"
-    symbol: MKR
-    decimals: 18
-    rank: 21
-
-  - network_id: polygon
-    address: "0x9c2C5fd7b07e95EE044ddeBa0E97a665F142394f"
-    symbol: 1INCH
-    decimals: 18
-    rank: 22
-
-  - network_id: polygon
-    address: "0x8505b9d2254a7ae468c0e9dd10ccea3a837aef5c"
-    symbol: COMP
-    decimals: 18
-    rank: 23
-
-  - network_id: polygon
-    address: "0x1c954e8fe737f99f68fa1ccda3e51ebdb291948c"
-    symbol: KNC
-    decimals: 18
-    rank: 24
-
-  - network_id: polygon
-    address: "0xB7B31a6bc18e48888545ce79e83e06003be70930"
-    symbol: APE
-    decimals: 18
-    rank: 25
-
-  - network_id: polygon
-    address: "0x0266F4F08D82372CF0fcbCCC0ff74309089C74d1"
-    symbol: rETH
-    decimals: 18
-    rank: 26
 
   - network_id: polygon
     address: "0xdf7837de1f2fa4631d716cf2502f8b230f1dcc32"
@@ -302,11 +218,30 @@ tokens:
     decimals: 18
     rank: 29
 
+  # Добавлены 15.09 по измерению стоимости круга на 1000 USDT: у всех
+  # трёх проход через пулы дешевле 0,7 %, что оставляет место расхождению
+  # цен между агрегаторами.
   - network_id: polygon
-    address: "0x85955046df4668e1dd369d2de9f3aeb98dd2a369"
-    symbol: DPI
+    address: "0xfa68FB4628DFF1028CFEc22b4162FCcd0d45efb6"
+    symbol: MaticX
     decimals: 18
-    rank: 30
+    rank: 31
+
+  - network_id: polygon
+    # Евро-стейблкоин: относительно USDT он подвижен, поэтому меткой
+    # usd_stable не помечается — интересен именно расхождением EUR/USD.
+    address: "0xE0aEa583266584DafBB3f9C3211d5588c73fEa8d"
+    symbol: EURe
+    decimals: 18
+    rank: 32
+
+  - network_id: polygon
+    # Мостовой SOL (Wormhole). Знаков 9, а не 18: значение берётся из
+    # реестра токенов и из символа не выводится.
+    address: "0xd93f7E271cB87c23AaA73edC008A79646d1F9912"
+    symbol: SOL
+    decimals: 9
+    rank: 33
 
 routes:
   # Покупка и продажа у одного агрегатора. Архитектура это допускает при
