@@ -16,8 +16,8 @@ workflow не входит (``10_LEVEL_1_SCANNER.md`` §38). Поэтому ка
 from __future__ import annotations
 
 from monik.config.root import Configuration
+from monik.domain.enums.modes import ScanMode
 from monik.domain.enums.providers import ProviderId
-from monik.domain.errors import ConfigurationError
 from monik.domain.models.scan import ScanScope
 from monik.domain.models.token import Token
 from monik.domain.value_objects.identity import NetworkId
@@ -57,36 +57,45 @@ class ScopeBuilder:
         """
         return tuple(network.network_id for network in self._networks.enabled())
 
-    def build(self, network_id: NetworkId) -> ScanScope:
-        """Собрать scope цикла одной сети.
+    def build(self, network_id: NetworkId, mode: ScanMode) -> ScanScope | None:
+        """Собрать scope прохода одной сети в заданном режиме.
 
         Отключённые сети, токены и провайдеры в scope не попадают
-        (``02_LEVEL1_SCANNER.md`` §70-72).
+        (``02_LEVEL1_SCANNER.md`` §70-72). ``None`` означает, что проходу
+        нечего делать: нет работающего провайдера этого режима или нет
+        подходящих токенов. Пустой цикл не создаётся — он только засорял
+        бы историю.
         """
         if not self._networks.is_enabled(network_id):
-            raise ConfigurationError(
-                f"network {network_id} is disabled; Level 1 has nothing to scan there"
-            )
-
-        base_token = self._tokens.base_token(network_id)
-        providers = self.active_providers(network_id)
-        if not providers:
-            raise ConfigurationError(
-                f"no provider is available for network {network_id}; Level 1 has no source"
-            )
-
-        tokens = self.scan_tokens(network_id)
-        if not tokens:
-            raise ConfigurationError(
-                f"no enabled intermediate token is available on network {network_id}"
-            )
-
+            return None
+        providers = tuple(
+            provider_id
+            for provider_id in self.active_providers(network_id)
+            if self._providers.participates_in(provider_id, mode)
+        )
+        tokens = self.mode_tokens(network_id, mode)
+        if not providers or not tokens:
+            return None
         return ScanScope(
+            mode=mode,
             networks=(network_id,),
             providers=providers,
             tokens=tuple(token.key for token in tokens),
-            raw_amounts=self._raw_amounts(base_token),
+            raw_amounts=self._raw_amounts(self._tokens.base_token(network_id)),
         )
+
+    def mode_tokens(self, network_id: NetworkId, mode: ScanMode) -> tuple[Token, ...]:
+        """Токены, которые проверяет этот режим.
+
+        Отбор описан здесь, а не в конфигурации: у каждого режима своя
+        логика. ``ur`` берёт весь набор, ``fest`` — только помеченные
+        ``usd_stable``, поэтому новый стабильный токен попадает в частый
+        проход, как только получит метку, без правки списков.
+        """
+        tokens = self.scan_tokens(network_id)
+        if mode is ScanMode.FEST:
+            return tuple(token for token in tokens if token.usd_stable)
+        return tokens
 
     def active_providers(self, network_id: NetworkId) -> tuple[ProviderId, ...]:
         """Провайдеры, работающие с этой сетью прямо сейчас.
@@ -102,34 +111,6 @@ class ScopeBuilder:
             provider.provider_id
             for provider in self._providers.active(now)
             if self._providers.declares_network(provider.provider_id, network_id)
-        )
-
-    def build_stable(self, network_id: NetworkId) -> ScanScope | None:
-        """Scope учащённого прохода одной сети: только стабильные токены.
-
-        Возвращает ``None``, когда проходу не с чем работать — нет
-        стабильных токенов или ни один провайдер в нём не участвует.
-        Пустой scope создавать нельзя: цикл без источников и без токенов
-        не имеет смысла и только засорял бы историю.
-
-        Набор задаётся меткой ``usd_stable``, а не списком имён: новый
-        стабильный токен попадает в проход, как только получит метку.
-        """
-        if not self._networks.is_enabled(network_id):
-            return None
-        providers = tuple(
-            provider_id
-            for provider_id in self.active_providers(network_id)
-            if self._providers.participates_in_fast_scan(provider_id)
-        )
-        tokens = tuple(token for token in self.scan_tokens(network_id) if token.usd_stable)
-        if not providers or not tokens:
-            return None
-        return ScanScope(
-            networks=(network_id,),
-            providers=providers,
-            tokens=tuple(token.key for token in tokens),
-            raw_amounts=self._raw_amounts(self._tokens.base_token(network_id)),
         )
 
     def scan_tokens(self, network_id: NetworkId) -> tuple[Token, ...]:

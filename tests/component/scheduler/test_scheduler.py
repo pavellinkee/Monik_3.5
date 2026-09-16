@@ -41,7 +41,7 @@ def clock() -> FakeClock:
 
 
 def interval_task(
-    task_id: str = "level1_scan",
+    task_id: str = "scan_ur",
     *,
     seconds: int = 300,
     overlap: OverlapPolicy = OverlapPolicy.SKIP,
@@ -390,11 +390,11 @@ def test_registry_uses_user_configuration() -> None:
         return None
 
     config = SchedulerConfig(
-        tasks={"level1_scan": TaskScheduleConfig(mode=TaskMode.INTERVAL, interval_seconds=60)}
+        tasks={"scan_ur": TaskScheduleConfig(mode=TaskMode.INTERVAL, interval_seconds=60)}
     )
     registry = TaskRegistry()
     item = registry.register(
-        "level1_scan",
+        "scan_ur",
         handler,
         config=config,
         default=TaskScheduleConfig(mode=TaskMode.INTERVAL, interval_seconds=300),
@@ -467,7 +467,7 @@ async def test_executions_are_recorded(clock: FakeClock) -> None:
 
     assert [record.status for record in log.records] == [TaskExecutionStatus.SUCCESS]
     # Задача сохранена до записи запуска: журнал ссылается на неё.
-    assert "level1_scan" in log.tasks
+    assert "scan_ur" in log.tasks
 
 
 async def test_schedule_resumes_from_the_last_successful_run(clock: FakeClock) -> None:
@@ -478,7 +478,7 @@ async def test_schedule_resumes_from_the_last_successful_run(clock: FakeClock) -
 
     last = SchedulerExecution(
         execution_id="e1",
-        task_id="level1_scan",
+        task_id="scan_ur",
         status=TaskExecutionStatus.SUCCESS,
         scheduled_for=NOW - timedelta(seconds=100),
         started_at=NOW - timedelta(seconds=100),
@@ -493,7 +493,7 @@ async def test_schedule_resumes_from_the_last_successful_run(clock: FakeClock) -
 
     await scheduler.prepare()
 
-    assert scheduler.next_run("level1_scan") == NOW + timedelta(seconds=200)
+    assert scheduler.next_run("scan_ur") == NOW + timedelta(seconds=200)
     assert await scheduler.tick() == ()
 
 
@@ -521,7 +521,7 @@ class TestIntervalGrid:
 
         await scheduler.tick()
 
-        assert scheduler.next_run("level1_scan") == NOW + timedelta(seconds=300)
+        assert scheduler.next_run("scan_ur") == NOW + timedelta(seconds=300)
 
     async def test_grid_holds_over_several_runs(self, clock: FakeClock) -> None:
         """Сдвиг не накапливается: каждый старт кратен интервалу."""
@@ -559,7 +559,7 @@ class TestIntervalGrid:
         await scheduler.tick()
 
         # Пропущены три интервала, но назначен один запуск — на «сейчас».
-        assert scheduler.next_run("level1_scan") == NOW + timedelta(seconds=1000)
+        assert scheduler.next_run("scan_ur") == NOW + timedelta(seconds=1000)
 
     async def test_restart_keeps_the_grid(self, clock: FakeClock) -> None:
         """После перезапуска отсчёт идёт от старта прошлого выполнения."""
@@ -569,7 +569,7 @@ class TestIntervalGrid:
 
         last = SchedulerExecution(
             execution_id="e1",
-            task_id="level1_scan",
+            task_id="scan_ur",
             status=TaskExecutionStatus.SUCCESS,
             scheduled_for=NOW - timedelta(seconds=100),
             started_at=NOW - timedelta(seconds=100),
@@ -585,7 +585,7 @@ class TestIntervalGrid:
 
         await scheduler.prepare()
 
-        assert scheduler.next_run("level1_scan") == NOW + timedelta(seconds=200)
+        assert scheduler.next_run("scan_ur") == NOW + timedelta(seconds=200)
 
 
 class TestParallelTick:
@@ -605,7 +605,7 @@ class TestParallelTick:
             release.set()
 
         registry = TaskRegistry()
-        for task_id, handler in (("level1_scan", slow), ("telegram_commands", quick)):
+        for task_id, handler in (("scan_ur", slow), ("telegram_commands", quick)):
             item = registered(interval_task(task_id, seconds=300), handler)
             registry.tasks[task_id] = item
         scheduler = Scheduler(registry=registry, runner=TaskRunner(clock), clock=clock)

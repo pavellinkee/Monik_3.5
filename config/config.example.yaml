@@ -150,11 +150,24 @@ scanner:
   # маршрут каждую из перечисленных здесь. Число сумм произвольно.
   amounts: ["50", "100", "500", "1000"]
 
+  # Режимы сканирования. Каждый — именованный проход Level 1 со своим
+  # темпом и своей планкой. Уровни при этом не меняются: Level 1 ищет,
+  # Level 2 подтверждает. Режим говорит, чем и как часто ищет Level 1.
+  modes:
+    # Основной проход: весь набор токенов, все включённые агрегаторы.
+    ur:
+      enabled: true
+      interval_seconds: 300       # production default — 5 минут
+    # Частый проход по стабильным токенам. Набор определяется меткой
+    # usd_stable у токена, состав агрегаторов — их собственным списком
+    # режимов (providers[].modes).
+    fest:
+      enabled: false
+      interval_seconds: 30
+
   level1:
-    enabled: true
     # Сумма поиска. Если не задана — наименьшая из amounts.
     # amount: "50"
-    interval_seconds: 300         # production default — 5 минут
     overlap_policy: skip
     scan_timeout_seconds: 240
     top_tokens: 30
@@ -175,8 +188,12 @@ scanner:
 
 profitability:
   threshold_metric: net_roi
-  final_threshold_percent: "1.00"        # сравнение >=, ровно 1.00 % проходит
-  preliminary_threshold_percent: "1.00"
+  # Порог каждого режима. Один на оба уровня: Level 1 ищет и Level 2
+  # подтверждает по одной планке (the_main_rules.md, правило 10).
+  # Сравнение >=, ровно указанное значение проходит.
+  thresholds:
+    ur: "1.00"
+    fest: "1.00"
 
 fees:
   enabled: true
@@ -235,7 +252,8 @@ resources:
 scheduler:
   enabled: true
   tasks:
-    level1_scan:
+    # По задаче на режим: период каждой берётся из scanner.modes.
+    scan_ur:
       mode: interval
       interval_seconds: 300
       overlap_policy: skip

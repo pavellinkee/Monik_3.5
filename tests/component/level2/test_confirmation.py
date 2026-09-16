@@ -20,6 +20,7 @@ from monik.domain.enums.lifecycle import (
     JobStatus,
     OpportunityStatus,
 )
+from monik.domain.enums.modes import ScanMode
 from monik.domain.enums.operations import OperationType, RouteValidationOutcome
 from monik.domain.enums.providers import ProviderId
 from monik.domain.errors import DomainValidationError, RateLimitError
@@ -33,6 +34,7 @@ from tests.component.level1.conftest import (
     StaticGasSource,
     StaticRateSource,
     arbitrage_rule,
+    build_harness,
     level1_document,
 )
 from tests.component.level2.conftest import Level2Harness, build_level2
@@ -398,3 +400,54 @@ async def test_cancelled_job_is_never_confirmed(database: Database, clock: FakeC
     assert job.status is JobStatus.CANCELLED
     opportunity = await harness.opportunities.get(harness.opportunity.opportunity_id)
     assert opportunity is not None and opportunity.status is OpportunityStatus.CANCELLED
+
+
+class TestModeThreshold:
+    """Level 2 судит возможность планкой её режима.
+
+    Возможность, найденную частым проходом ``fest`` с мягким порогом,
+    нельзя подтверждать строгим порогом основного режима: проход и
+    проверка расходовали бы работу впустую, отвергая ровно то, что только
+    что нашли (``the_main_rules.md``, правило 10).
+    """
+
+    def _document(self, ur: str, fest: str) -> dict[str, object]:
+        document = level1_document()
+        for token in document["tokens"]:
+            if token["symbol"] in {"USDT", "AAVE"}:
+                token["usd_stable"] = True
+        document["scanner"]["modes"] = {"fest": {"enabled": True, "interval_seconds": 30}}
+        document["scanner"]["level1"] = {"scan_timeout_seconds": 30}
+        document["profitability"] = {"thresholds": {"ur": ur, "fest": fest}}
+        return document
+
+    async def test_fest_opportunity_is_confirmed_by_the_fest_threshold(
+        self, database: Database, clock: FakeClock
+    ) -> None:
+        """Планка ur недостижима, планка fest достижима — решает fest."""
+        configuration = parse_configuration(
+            self._document(ur="999", fest="-100"), environ=dict(VALID_ENV)
+        ).config
+        harness = await build_level2(configuration, database, clock, mode=ScanMode.FEST)
+        assert harness.opportunity.mode is ScanMode.FEST
+
+        result = await harness.scanner.confirm(harness.job)
+
+        assert result.job_status is JobStatus.CONFIRMED
+
+    async def test_strict_fest_threshold_finds_nothing_even_when_ur_is_lenient(
+        self, database: Database, clock: FakeClock
+    ) -> None:
+        """Обратная проверка: планка режима действует и на поиске.
+
+        Одна планка на оба уровня означает, что строгий порог режима
+        отсекает возможность уже на поиске, а не создаёт её, чтобы Level 2
+        отверг её следом.
+        """
+        configuration = parse_configuration(
+            self._document(ur="-100", fest="999"), environ=dict(VALID_ENV)
+        ).config
+        level1 = build_harness(configuration, database, clock)
+
+        assert not (await level1.scanner.scan_all(ScanMode.FEST))[0].opportunities
+        assert (await level1.scanner.scan_all(ScanMode.UR))[0].opportunities

@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 
+from monik.domain.enums.modes import ScanMode
 from monik.domain.enums.operations import OperationType
 from monik.domain.enums.providers import ProviderId
 from monik.domain.models.opportunity import Candidate
@@ -55,6 +56,7 @@ class TokenCycle:
         clock: Clock,
         scan_id: ScanId,
         network_id: NetworkId,
+        mode: ScanMode,
         base_token: Token,
         providers: tuple[ProviderId, ...],
         pairs: tuple[tuple[ProviderId, ProviderId], ...],
@@ -67,6 +69,7 @@ class TokenCycle:
         self._clock = clock
         self._scan_id = scan_id
         self._network_id = network_id
+        self._mode = mode
         self._base_token = base_token
         self._providers = providers
         self._pairs = pairs
@@ -180,7 +183,7 @@ class TokenCycle:
     async def _build_candidate(self, buy_quote: Quote, sell_quote: Quote) -> Candidate | None:
         """Собрать кандидата и его предварительный результат."""
         try:
-            preliminary = await self._evaluator.evaluate(buy_quote, sell_quote)
+            preliminary = await self._evaluator.evaluate(buy_quote, sell_quote, self._mode)
             return Candidate(
                 scan_id=self._scan_id,
                 buy_quote=buy_quote,

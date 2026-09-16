@@ -15,6 +15,7 @@ from typing import Any
 import pytest
 
 from monik.config import Configuration, parse_configuration
+from monik.domain.enums.modes import ScanMode
 from monik.domain.enums.operations import RoutingMode
 from monik.domain.enums.providers import ProviderId
 from monik.domain.errors import ConfigurationError
@@ -136,7 +137,7 @@ class TestScopePerNetwork:
     def test_every_enabled_network_is_scanned(self, database: Database, clock: FakeClock) -> None:
         harness = _harness(two_network_document(), database, clock)
 
-        scopes = harness.scanner.scopes()
+        scopes = harness.scanner.scopes(ScanMode.UR)
 
         assert [scope.networks for scope in scopes] == [(POLYGON,), (ARBITRUM,)]
 
@@ -144,7 +145,7 @@ class TestScopePerNetwork:
         """Межсетевая комбинация не может возникнуть даже случайно."""
         harness = _harness(two_network_document(), database, clock)
 
-        for scope in harness.scanner.scopes():
+        for scope in harness.scanner.scopes(ScanMode.UR):
             assert len(scope.networks) == 1
             network_id = scope.networks[0]
             assert all(key.network_id == network_id for key in scope.tokens)
@@ -158,7 +159,7 @@ class TestScopePerNetwork:
         ]
         harness = _harness(document, database, clock)
 
-        assert [scope.networks for scope in harness.scanner.scopes()] == [(POLYGON,)]
+        assert [scope.networks for scope in harness.scanner.scopes(ScanMode.UR)] == [(POLYGON,)]
 
     def test_provider_is_taken_only_for_the_networks_it_declares(
         self, database: Database, clock: FakeClock
@@ -167,7 +168,9 @@ class TestScopePerNetwork:
         document["providers"][0]["supported_networks"] = ["polygon"]
         harness = _harness(document, database, clock)
 
-        by_network = {scope.networks[0]: scope.providers for scope in harness.scanner.scopes()}
+        by_network = {
+            scope.networks[0]: scope.providers for scope in harness.scanner.scopes(ScanMode.UR)
+        }
 
         assert ProviderId.ONEINCH in by_network[POLYGON]
         assert ProviderId.ONEINCH not in by_network[ARBITRUM]
@@ -212,7 +215,7 @@ class TestSweep:
     ) -> None:
         harness = _harness(two_network_document(), database, clock)
 
-        results = await harness.scanner.scan_all()
+        results = await harness.scanner.scan_all(ScanMode.UR)
 
         assert [result.scan.scope.networks[0] for result in results] == [POLYGON, ARBITRUM]
         assert all(result.scan.statistics.quote_requests > 0 for result in results)
@@ -234,7 +237,7 @@ class TestSweep:
         )
         harness = _harness(document, database, clock)
 
-        scopes = harness.scanner.stable_scopes()
+        scopes = harness.scanner.scopes(ScanMode.FEST)
 
         assert [scope.networks for scope in scopes] == [(POLYGON,), (ARBITRUM,)]
         assert all(
@@ -247,7 +250,7 @@ class TestSweep:
         """Пустой цикл не создаётся: он только засорял бы историю."""
         harness = _harness(two_network_document(), database, clock)
 
-        scopes = harness.scanner.stable_scopes()
+        scopes = harness.scanner.scopes(ScanMode.FEST)
 
         assert [scope.networks for scope in scopes] == [(ARBITRUM,)]
 
@@ -256,7 +259,7 @@ class TestSweep:
     ) -> None:
         """Сети независимы: отказ одной не отменяет поиск во второй."""
         harness = _harness(two_network_document(), database, clock)
-        broken = harness.scanner.scopes()[0].networks[0]
+        broken = harness.scanner.scopes(ScanMode.UR)[0].networks[0]
         original = harness.scanner.scan
 
         async def failing(scope, *args, **kwargs):  # noqa: ANN001, ANN202
@@ -266,7 +269,7 @@ class TestSweep:
 
         harness.scanner.scan = failing  # type: ignore[method-assign]
 
-        results = await harness.scanner.scan_all()
+        results = await harness.scanner.scan_all(ScanMode.UR)
 
         assert [result.scan.scope.networks[0] for result in results] == [ARBITRUM]
 
@@ -281,7 +284,7 @@ class TestCycleRecord:
         harness = _harness(two_network_document(), database, clock)
 
         with caplog.at_level("INFO", logger="monik.services.level1.scanner"):
-            await harness.scanner.scan_all()
+            await harness.scanner.scan_all(ScanMode.UR)
 
         networks = [
             record.monik_fields["network"]

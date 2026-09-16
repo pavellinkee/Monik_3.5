@@ -15,6 +15,7 @@ from monik.config import (
 )
 from monik.config.sections import Environment, GasSource, PriceSource
 from monik.domain.enums import NotificationMode, OverlapPolicy, ProviderId, ThresholdMetric
+from monik.domain.enums.modes import ScanMode
 from monik.domain.errors import ConfigurationError
 from monik.domain.value_objects.identity import NetworkId
 from monik.services.observability.redaction import SecretRegistry
@@ -38,12 +39,12 @@ class TestValidConfiguration:
     ) -> None:
         """Дефолты соответствуют утверждённым значениям."""
         config = _load(document, env)
-        assert config.scanner.level1.interval_seconds == 300
+        assert config.scanner.modes.ur.interval_seconds == 300
         assert config.scanner.level1.overlap_policy is OverlapPolicy.SKIP
         assert config.scanner.level1.top_tokens == 30
         assert config.scanner.level2.max_parallel == 20
         assert config.resources.retry.max_attempts == 3
-        assert config.profitability.final_threshold_percent == Decimal("1.00")
+        assert config.profitability.threshold_for(ScanMode.UR) == Decimal("1.00")
         assert config.profitability.threshold_metric is ThresholdMetric.NET_ROI
         assert config.notifications.mode is NotificationMode.A
         # Цена газа из котировки — первый источник: значение приходит
@@ -318,21 +319,28 @@ class TestCrossFieldValidation:
         with pytest.raises(ConfigurationError, match="duplicate token"):
             _load(document, env)
 
-    def test_preliminary_threshold_above_final_is_rejected(
+    def test_mode_without_a_threshold_is_rejected(
         self, document: dict[str, Any], env: dict[str, str]
     ) -> None:
-        document["profitability"] = {
-            "final_threshold_percent": "1.00",
-            "preliminary_threshold_percent": "2.00",
-        }
-        with pytest.raises(ConfigurationError, match="preliminary threshold"):
+        """Режим без порога — незаданная политика, а не значение по умолчанию."""
+        document["profitability"] = {"thresholds": {"ur": "0.10"}}
+        with pytest.raises(ConfigurationError, match="threshold is not set"):
             _load(document, env)
 
-    def test_scan_timeout_longer_than_interval_is_rejected(
+    def test_scan_timeout_longer_than_the_fastest_mode_is_rejected(
         self, document: dict[str, Any], env: dict[str, str]
     ) -> None:
-        document["scanner"]["level1"] = {"interval_seconds": 60, "scan_timeout_seconds": 120}
+        """Таймаут не может превышать самый частый включённый режим."""
+        document["scanner"]["modes"] = {"fest": {"enabled": True, "interval_seconds": 60}}
+        document["scanner"]["level1"] = {"scan_timeout_seconds": 120}
         with pytest.raises(ConfigurationError, match="scan_timeout_seconds"):
+            _load(document, env)
+
+    def test_all_modes_disabled_is_rejected(
+        self, document: dict[str, Any], env: dict[str, str]
+    ) -> None:
+        document["scanner"]["modes"] = {"ur": {"enabled": False}, "fest": {"enabled": False}}
+        with pytest.raises(ConfigurationError, match="at least one scan mode"):
             _load(document, env)
 
 
@@ -414,23 +422,25 @@ class TestScheduledIntervalSource:
     def test_schedule_takes_the_period_from_the_subsystem(
         self, document: dict[str, Any], env: dict[str, str]
     ) -> None:
-        document["scanner"]["level1"] = {"interval_seconds": 300, "scan_timeout_seconds": 240}
+        document["scanner"]["modes"] = {"ur": {"interval_seconds": 300}}
+        document["scanner"]["level1"] = {"scan_timeout_seconds": 240}
         document["scheduler"] = {
             "enabled": True,
-            "tasks": {"level1_scan": {"mode": "interval", "overlap_policy": "skip"}},
+            "tasks": {"scan_ur": {"mode": "interval", "overlap_policy": "skip"}},
         }
         config = _load(document, env)
 
-        assert config.scheduler.tasks["level1_scan"].interval_seconds == 300
+        assert config.scheduler.tasks["scan_ur"].interval_seconds == 300
 
     def test_matching_value_in_the_schedule_is_accepted(
         self, document: dict[str, Any], env: dict[str, str]
     ) -> None:
-        document["scanner"]["level1"] = {"interval_seconds": 300, "scan_timeout_seconds": 240}
+        document["scanner"]["modes"] = {"ur": {"interval_seconds": 300}}
+        document["scanner"]["level1"] = {"scan_timeout_seconds": 240}
         document["scheduler"] = {
             "enabled": True,
             "tasks": {
-                "level1_scan": {
+                "scan_ur": {
                     "mode": "interval",
                     "interval_seconds": 300,
                     "overlap_policy": "skip",
@@ -439,17 +449,18 @@ class TestScheduledIntervalSource:
         }
         config = _load(document, env)
 
-        assert config.scheduler.tasks["level1_scan"].interval_seconds == 300
+        assert config.scheduler.tasks["scan_ur"].interval_seconds == 300
 
     def test_divergent_value_stops_the_start(
         self, document: dict[str, Any], env: dict[str, str]
     ) -> None:
         """Молчаливое расхождение опаснее отсутствия настройки."""
-        document["scanner"]["level1"] = {"interval_seconds": 300, "scan_timeout_seconds": 240}
+        document["scanner"]["modes"] = {"ur": {"interval_seconds": 300}}
+        document["scanner"]["level1"] = {"scan_timeout_seconds": 240}
         document["scheduler"] = {
             "enabled": True,
             "tasks": {
-                "level1_scan": {
+                "scan_ur": {
                     "mode": "interval",
                     "interval_seconds": 600,
                     "overlap_policy": "skip",

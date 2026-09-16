@@ -24,6 +24,7 @@ from monik.domain.enums.lifecycle import (
     ScanStatus,
     TaskExecutionStatus,
 )
+from monik.domain.enums.modes import ScanMode
 from monik.domain.enums.notifications import (
     DeliveryErrorKind,
     DestinationKind,
@@ -81,4 +82,5 @@ __all__ = [
     "TaskExecutionStatus",
     "TaskMode",
     "ThresholdMetric",
+    "ScanMode",
 ]

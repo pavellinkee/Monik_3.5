@@ -17,7 +17,6 @@ from typing import Any
 import pytest
 
 from monik.app.lifecycle import (
-    TASK_LEVEL1_SCAN,
     TASK_NOTIFICATIONS,
     Application,
     create_application,
@@ -29,6 +28,7 @@ from monik.domain.enums.lifecycle import (
     NotificationStatus,
     OpportunityStatus,
 )
+from monik.domain.enums.modes import ScanMode
 from monik.domain.enums.notifications import DestinationKind
 from monik.domain.enums.providers import ProviderId
 from monik.domain.enums.resources import RequestPriority
@@ -60,7 +60,7 @@ def application_document(**overrides: Any) -> dict[str, Any]:
     }
     document["scheduler"] = {
         "tasks": {
-            TASK_LEVEL1_SCAN: {"mode": "interval", "interval_seconds": 300},
+            "scan_ur": {"mode": "interval", "interval_seconds": 300},
             TASK_NOTIFICATIONS: {"mode": "interval", "interval_seconds": 10},
         }
     }
@@ -144,7 +144,7 @@ async def test_scheduler_tick_runs_a_scan(
 
     outcomes = await app.scheduler.tick()
 
-    assert any(item.execution.task_id == TASK_LEVEL1_SCAN for item in outcomes)
+    assert any(item.execution.task_id == "scan_ur" for item in outcomes)
     row = await database.fetch_one("SELECT COUNT(*) AS count FROM scans", ())
     assert row is not None and row["count"] == 1
 
@@ -219,7 +219,7 @@ async def test_full_cycle_creates_opportunity_and_notification(
     )
     try:
         await app.startup()
-        result = (await app.container.level1.scan_all())[0]
+        result = (await app.container.level1.scan_all(ScanMode.UR))[0]
         assert result.opportunities
 
         confirmations = await app.container.level2_worker.drain()
@@ -262,7 +262,7 @@ async def test_interrupted_job_is_requeued(tmp_path: pathlib.Path, clock: FakeCl
 
     first, database = await create_application(loaded, clock=clock, adapters=fake_adapters(clock))
     await first.startup()
-    result = (await first.container.level1.scan_all())[0]
+    result = (await first.container.level1.scan_all(ScanMode.UR))[0]
     opportunity = result.opportunities[0]
     job = await first.container.repositories.jobs.get_by_opportunity(opportunity.opportunity_id)
     assert job is not None
@@ -293,7 +293,7 @@ async def test_expired_job_is_not_requeued(tmp_path: pathlib.Path, clock: FakeCl
 
     first, database = await create_application(loaded, clock=clock, adapters=fake_adapters(clock))
     await first.startup()
-    result = (await first.container.level1.scan_all())[0]
+    result = (await first.container.level1.scan_all(ScanMode.UR))[0]
     job = await first.container.repositories.jobs.get_by_opportunity(
         result.opportunities[0].opportunity_id
     )
@@ -336,7 +336,7 @@ async def test_interrupted_notification_is_requeued(
 
     first, database = await create_application(loaded, clock=clock, adapters=fake_adapters(clock))
     await first.startup()
-    result = (await first.container.level1.scan_all())[0]
+    result = (await first.container.level1.scan_all(ScanMode.UR))[0]
     confirmations = await first.container.level2_worker.drain()
     outcome = await first.container.opportunities.record_confirmation(
         result.opportunities[0], confirmations[0]

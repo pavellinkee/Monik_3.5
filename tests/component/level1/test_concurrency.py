@@ -14,6 +14,7 @@ from typing import Any
 import pytest
 
 from monik.config import Configuration, parse_configuration
+from monik.domain.enums.modes import ScanMode
 from monik.domain.enums.operations import OperationType
 from monik.domain.enums.providers import ProviderId
 from monik.domain.models.quote import Quote
@@ -149,7 +150,7 @@ async def test_sell_of_one_token_does_not_wait_for_buy_of_another(
         adapters=adapters,  # type: ignore[arg-type]
     )
 
-    task = asyncio.ensure_future(harness.scanner.scan(harness.scanner.scopes()[0]))
+    task = asyncio.ensure_future(harness.scanner.scan(harness.scanner.scopes(ScanMode.UR)[0]))
     try:
         await asyncio.wait_for(aave_sold.wait(), timeout=5)
         # Цикл WETH заблокирован на BUY: до SELL он не дошёл, а SELL для
@@ -184,7 +185,7 @@ async def test_concurrency_is_bounded_by_configuration(
         adapters=adapters,  # type: ignore[arg-type]
     )
 
-    await harness.scanner.scan_all()
+    await harness.scanner.scan_all(ScanMode.UR)
     assert all(adapter.max_in_flight <= 1 for adapter in adapters.values())
 
 
@@ -196,8 +197,8 @@ async def test_scan_is_deterministic_for_equal_inputs(
     configuration = two_token_configuration(
         max_concurrent_requests=limit, deduplication_window_seconds=0
     )
-    first = (await build_harness(configuration, database, clock).scanner.scan_all())[0]
-    second = (await build_harness(configuration, database, clock).scanner.scan_all())[0]
+    first = (await build_harness(configuration, database, clock).scanner.scan_all(ScanMode.UR))[0]
+    second = (await build_harness(configuration, database, clock).scanner.scan_all(ScanMode.UR))[0]
 
     assert [str(item.fingerprint) for item in first.opportunities] == [
         str(item.fingerprint) for item in second.opportunities

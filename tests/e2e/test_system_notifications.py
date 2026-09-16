@@ -19,7 +19,6 @@ from typing import Any
 import pytest
 
 from monik.app.lifecycle import (
-    TASK_LEVEL1_SCAN,
     TASK_NOTIFICATIONS,
     TASK_SYSTEM_HEALTH,
     Application,
@@ -32,6 +31,7 @@ from monik.domain.enums.health import (
     ProviderHealthStatus,
     SupervisorState,
 )
+from monik.domain.enums.modes import ScanMode
 from monik.domain.enums.notifications import DestinationKind, StartupKind
 from monik.domain.enums.providers import ProviderId
 from monik.domain.models.notification import NotificationDestination
@@ -64,7 +64,7 @@ def _document(tmp_path: pathlib.Path, name: str, **overrides: Any) -> dict[str, 
     document["database"] = {"path": str(tmp_path / name)}
     document["scheduler"] = {
         "tasks": {
-            TASK_LEVEL1_SCAN: {"mode": "interval", "interval_seconds": 300},
+            "scan_ur": {"mode": "interval", "interval_seconds": 300},
             TASK_NOTIFICATIONS: {"mode": "interval", "interval_seconds": 10},
         }
     }
@@ -204,7 +204,7 @@ async def test_successful_scans_do_not_create_notifications(
         await app.startup()
         baseline = len(transport.sent)
         for _ in range(5):
-            await app.container.level1.scan_all()
+            await app.container.level1.scan_all(ScanMode.UR)
             await app.container.system_notifier.notify_health(  # type: ignore[union-attr]
                 app.container.health.application_health()
             )
@@ -257,7 +257,7 @@ async def test_status_command_reports_application_providers_and_last_scan(
     app, database = await create_application(loaded, clock=clock, adapters=_adapters(clock))
     try:
         await app.startup()
-        await app.scheduler.trigger(TASK_LEVEL1_SCAN)
+        await app.scheduler.trigger("scan_ur")
         assert app.container.commands is not None
         response = await app.container.commands.router.handle_text("/status")
 

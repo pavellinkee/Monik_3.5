@@ -16,6 +16,7 @@ import pytest
 
 from monik.config import Configuration
 from monik.config.sections.database import DatabaseConfig
+from monik.domain.enums.modes import ScanMode
 from monik.domain.enums.providers import ProviderId
 from monik.domain.models.job import Level2Job
 from monik.domain.models.opportunity import Opportunity
@@ -100,8 +101,13 @@ async def build_level2(
     gas: StaticGasSource | None = None,
     rates: StaticRateSource | None = None,
     metrics: MetricsRegistry | None = None,
+    mode: ScanMode = ScanMode.UR,
 ) -> Level2Harness:
-    """Создать Opportunity через Level 1 и собрать над ней Level 2."""
+    """Создать Opportunity через Level 1 и собрать над ней Level 2.
+
+    ``mode`` задаёт режим прохода, которым возможность найдена: Level 2
+    обязан подтверждать её планкой того же режима.
+    """
     level1 = build_harness(
         configuration,
         database,
@@ -109,7 +115,7 @@ async def build_level2(
         adapters=level1_adapter_set or level1_adapters(clock),
         metrics=metrics,
     )
-    scan = (await level1.scanner.scan_all())[0]
+    scan = (await level1.scanner.scan_all(mode))[0]
     assert scan.opportunities, "фикстуре нужна созданная Level 1 возможность"
     opportunity, job = level1.dispatcher.submitted[0]
 

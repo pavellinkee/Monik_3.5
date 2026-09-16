@@ -14,12 +14,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from monik.config.sections.profitability import ProfitabilityConfig
+from monik.domain.enums.modes import ScanMode
 from monik.domain.models.conversion import ConversionRate
 from monik.domain.models.fee import Fee, FeeSnapshot
 from monik.domain.models.gas import Gas
 from monik.domain.models.profit import ProfitCalculationInput, ProfitResult
 from monik.domain.models.quote import Quote
-from monik.domain.models.token import TokenKey
 from monik.services.calculator.profit import ProfitCalculator
 from monik.services.fees.context import FeeContext
 from monik.services.level2.ports import FeeSnapshotSource, GasSource, RateSource
@@ -61,11 +61,14 @@ class Level2Financials:
         self._networks = networks
         self._profitability = profitability
 
-    async def evaluate(self, buy_quote: Quote, sell_quote: Quote) -> VerificationFinancials:
+    async def evaluate(
+        self, buy_quote: Quote, sell_quote: Quote, mode: ScanMode
+    ) -> VerificationFinancials:
         """Рассчитать прибыльность суммы по свежим котировкам.
 
-        Порог — окончательный (``11_LEVEL_2_SCANNER.md`` §43), в отличие от
-        предварительного порога Level 1.
+        Планка берётся у режима, в котором возможность была найдена: тот
+        же порог применял и Level 1. Разные планки означали бы, что
+        проход находит то, что проверка заведомо отвергнет.
         """
         snapshots = (
             await self._fees.snapshot_for(_fee_context(buy_quote)),
@@ -90,22 +93,11 @@ class Level2Financials:
                 fees=fees,
                 gas=gas,
                 conversion_rates=() if rate is None else (rate,),
-                threshold=self._profitability.threshold_for(
-                    stable=self._is_stable(buy_quote.output_token), final=True
-                ),
+                threshold=self._profitability.threshold_for(mode),
                 threshold_metric=self._profitability.threshold_metric,
             )
         )
         return VerificationFinancials(result=result, fee_snapshots=snapshots, gas=gas)
-
-    def _is_stable(self, token: TokenKey) -> bool:
-        """Помечен ли промежуточный токен как стабильный.
-
-        Порог выбирается тот же, что и на Level 1: иначе найденная
-        возможность отвергалась бы на проверке по более строгой планке.
-        """
-        found = self._tokens.get(token)
-        return found is not None and found.usd_stable
 
     async def _gas_conversion_rate(
         self, buy_quote: Quote, sell_quote: Quote, *, gas: Gas

@@ -10,6 +10,7 @@ import pytest
 
 from monik.config import Configuration, parse_configuration
 from monik.config.sections.database import DatabaseConfig
+from monik.domain.enums.modes import ScanMode
 from monik.domain.enums.scheduler import TaskMode
 from monik.domain.models.scheduler import SchedulerTask
 from monik.infrastructure.db import Database, MigrationRunner
@@ -45,7 +46,7 @@ async def test_level1_records_scan_metrics(database: Database, clock: FakeClock)
     metrics = MetricsRegistry()
     harness = build_harness(configured(), database, clock, metrics=metrics)
 
-    result = (await harness.scanner.scan_all())[0]
+    result = (await harness.scanner.scan_all(ScanMode.UR))[0]
     assert metrics.counter(names.LEVEL1_SCANS, status=result.status.value) == 1
     assert metrics.counter(names.LEVEL1_QUOTE_REQUESTS, status="total") > 0
     assert metrics.counter(names.LEVEL1_OPPORTUNITIES, status="created") == 1
@@ -62,14 +63,14 @@ async def test_scheduler_records_task_metrics(clock: FakeClock) -> None:
 
     item = RegisteredTask(
         task=SchedulerTask(
-            task_id="level1_scan", mode=TaskMode.INTERVAL, interval=timedelta(seconds=300)
+            task_id="scan_ur", mode=TaskMode.INTERVAL, interval=timedelta(seconds=300)
         ),
         handler=handler,
     )
     await runner.run(item, scheduled_for=datetime(2026, 1, 1, 12, 0, tzinfo=UTC))
 
-    assert metrics.counter(names.SCHEDULER_EXECUTIONS, task="level1_scan", status="success") == 1
-    assert metrics.timing(names.SCHEDULER_SECONDS, task="level1_scan") is not None
+    assert metrics.counter(names.SCHEDULER_EXECUTIONS, task="scan_ur", status="success") == 1
+    assert metrics.timing(names.SCHEDULER_SECONDS, task="scan_ur") is not None
 
 
 def test_metric_labels_never_contain_identifiers() -> None:

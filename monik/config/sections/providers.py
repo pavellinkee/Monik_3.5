@@ -10,6 +10,7 @@ from pydantic import Field, model_validator
 
 from monik.config.base import ConfigSection
 from monik.config.secrets import SecretRef
+from monik.domain.enums.modes import ScanMode
 from monik.domain.enums.providers import ProviderId
 from monik.domain.value_objects.identity import NetworkId
 from monik.domain.value_objects.schedule import DailyWindow
@@ -98,12 +99,15 @@ class ProviderConfig(ConfigSection):
     #:
     #: ``None`` — круглосуточно.
     schedule: ProviderScheduleConfig | None = None
-    #: Участвует ли провайдер в учащённом проходе по стабильным токенам.
+    #: Режимы сканирования, в которых участвует провайдер.
     #:
-    #: Частый проход стоит сотен запросов в час, и провайдеру с суточной
-    #: квотой он её исчерпывает. Ограничение принадлежит провайдеру,
-    #: поэтому описано здесь, а не в настройках прохода.
-    fast_scan: bool = True
+    #: Ограничение принадлежит провайдеру, а не режиму: частый проход
+    #: стоит сотен запросов в час, и провайдеру с суточной квотой он её
+    #: исчерпывает. Поэтому состав участников описан здесь, у того, кто
+    #: платит за запросы, а не в настройках прохода.
+    #:
+    #: По умолчанию провайдер участвует во всех режимах.
+    modes: tuple[ScanMode, ...] = Field(default=tuple(ScanMode))
     options: dict[str, str] = Field(default_factory=dict)
 
     @model_validator(mode="after")
@@ -120,6 +124,10 @@ class ProviderConfig(ConfigSection):
                     f"provider {self.provider_id.value} declares a ui_url for network "
                     f"{network_id} which it does not support"
                 )
+        if self.enabled and not self.modes:
+            raise ValueError(
+                f"provider {self.provider_id.value} is enabled but participates in no scan mode"
+            )
         if self.enabled and not self.supported_networks:
             raise ValueError(
                 f"provider {self.provider_id.value} is enabled but declares no supported networks"

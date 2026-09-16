@@ -80,7 +80,7 @@ class AmountVerifier:
         if not sell.is_reproduced or sell.quote is None:
             return _route_failure(amount, sell, leg="sell")
 
-        financials = await self._financials.evaluate(buy.quote, sell.quote)
+        financials = await self._financials.evaluate(buy.quote, sell.quote, opportunity.mode)
         status = _status_for(financials.result.status, profitable=financials.result.is_profitable)
         _LOGGER.info(
             "amount verified",

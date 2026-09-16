@@ -37,6 +37,7 @@ from monik.config.loader import LoadedConfiguration
 from monik.config.sections.scheduler import TaskScheduleConfig
 from monik.domain.enums.control import ScannerStopReason
 from monik.domain.enums.health import ApplicationHealthStatus, SupervisorState
+from monik.domain.enums.modes import ScanMode
 from monik.domain.enums.notifications import StartupKind
 from monik.domain.enums.providers import ProviderId
 from monik.domain.enums.resources import RequestPriority
@@ -60,8 +61,7 @@ from monik.services.updates import AptPendingUpdates, UpdateWatcher
 __all__ = [
     "TASK_CAPABILITY_LOAD",
     "TASK_TOKEN_CHECK",
-    "TASK_LEVEL1_SCAN",
-    "TASK_LEVEL1_STABLE_SCAN",
+    "scan_task_name",
     "TASK_NOTIFICATIONS",
     "TASK_BACKUP",
     "TASK_SYSTEM_HEALTH",
@@ -74,9 +74,14 @@ __all__ = [
 
 _LOGGER = get_logger("app.lifecycle")
 
+
 #: Идентификаторы задач планировщика.
-TASK_LEVEL1_SCAN = "level1_scan"
-TASK_LEVEL1_STABLE_SCAN = "level1_stable_scan"
+#: Идентификатор задачи режима: по одной задаче на режим.
+def scan_task_name(mode: ScanMode) -> str:
+    """Имя задачи расписания для режима."""
+    return f"scan_{mode.value}"
+
+
 TASK_NOTIFICATIONS = "notification_delivery"
 TASK_TELEGRAM_COMMANDS = "telegram_commands"
 TASK_CAPABILITY_LOAD = "capability_load"
@@ -91,10 +96,10 @@ _SATURDAY = 6
 #: Расписания по умолчанию. Пользовательская конфигурация имеет приоритет
 #: (``14_SCHEDULER.md`` §58-59).
 _DEFAULT_SCHEDULES: dict[str, TaskScheduleConfig] = {
-    TASK_LEVEL1_SCAN: TaskScheduleConfig(mode=TaskMode.INTERVAL, interval_seconds=300),
+    "scan_ur": TaskScheduleConfig(mode=TaskMode.INTERVAL, interval_seconds=300),
     # Учащённый проход по стабильным токенам. Период задаётся настройкой
     # подсистемы (scanner.level1.stable_scan) и здесь не дублируется.
-    TASK_LEVEL1_STABLE_SCAN: TaskScheduleConfig(mode=TaskMode.INTERVAL, interval_seconds=30),
+    "scan_fest": TaskScheduleConfig(mode=TaskMode.INTERVAL, interval_seconds=30),
     TASK_NOTIFICATIONS: TaskScheduleConfig(mode=TaskMode.INTERVAL, interval_seconds=10),
     TASK_TELEGRAM_COMMANDS: TaskScheduleConfig(mode=TaskMode.INTERVAL, interval_seconds=5),
     TASK_CAPABILITY_LOAD: TaskScheduleConfig(mode=TaskMode.STARTUP),
@@ -373,20 +378,14 @@ def build_application(
         default=_DEFAULT_SCHEDULES[TASK_TOKEN_CHECK],
         priority=RequestPriority.MAINTENANCE,
     )
-    registry.register(
-        TASK_LEVEL1_SCAN,
-        _level1_task(container),
-        config=config.scheduler,
-        default=_DEFAULT_SCHEDULES[TASK_LEVEL1_SCAN],
-        priority=RequestPriority.LEVEL1_BUY,
-        timeout=timedelta(seconds=config.scanner.level1.scan_timeout_seconds),
-    )
-    if config.scanner.level1.stable_scan.enabled:
+    # По задаче на включённый режим: у каждого свой темп и своя планка,
+    # поэтому и расписание у каждого своё.
+    for mode in config.scanner.modes.enabled_modes():
         registry.register(
-            TASK_LEVEL1_STABLE_SCAN,
-            _stable_scan_task(container),
+            scan_task_name(mode),
+            _scan_task(container, mode),
             config=config.scheduler,
-            default=_DEFAULT_SCHEDULES[TASK_LEVEL1_STABLE_SCAN],
+            default=_DEFAULT_SCHEDULES[scan_task_name(mode)],
             priority=RequestPriority.LEVEL1_BUY,
             timeout=timedelta(seconds=config.scanner.level1.scan_timeout_seconds),
         )
@@ -537,12 +536,12 @@ async def _update_action(container: Container) -> str | None:
     return action_callback_data(CommandName.SYSTEM_UPDATE)
 
 
-def _level1_task(container: Container) -> TaskHandler:
-    """Цикл сканирования Level 1.
+def _scan_task(container: Container, mode: ScanMode) -> TaskHandler:
+    """Проход Level 1 в заданном режиме.
 
-    После цикла обновляется отметка времени последнего скана: она нужна
-    команде ``/status``. Само состояние подсистемы при этом не меняется,
-    поэтому успешные сканы не порождают уведомлений.
+    После прохода обновляется отметка времени: она нужна команде
+    ``/status``. Само состояние подсистемы при этом не меняется, поэтому
+    успешные проходы не порождают уведомлений.
     """
 
     async def run() -> None:
@@ -550,16 +549,19 @@ def _level1_task(container: Container) -> TaskHandler:
             # Оператор остановил сканирование: новые циклы не начинаются,
             # но уже принятые проверки Level 2 доводятся до конца.
             _LOGGER.info(
-                "level 1 scan skipped",
-                extra=log_fields(state=container.control.state().value),
+                "scan skipped",
+                extra=log_fields(mode=mode.value, state=container.control.state().value),
             )
             return
         if not container.level1.has_active_providers():
             # Все агрегаторы вне своих часов работы. Это решение
-            # оператора, а не сбой: цикл просто не нужен.
-            _LOGGER.info("level 1 scan skipped: no provider is within its working hours")
+            # оператора, а не сбой: проход просто не нужен.
+            _LOGGER.info(
+                "scan skipped: no provider is within its working hours",
+                extra=log_fields(mode=mode.value),
+            )
             return
-        if not await container.level1.scan_all():
+        if not await container.level1.scan_all(mode):
             # Ни одна сеть не дала завершённого цикла: состояние подсистемы
             # не обновляется, причина уже записана в журнал.
             return
@@ -568,28 +570,6 @@ def _level1_task(container: Container) -> TaskHandler:
             ApplicationHealthStatus.HEALTHY,
             reason=f"последний цикл {container.clock.now().isoformat(timespec='seconds')}",
         )
-
-    return run
-
-
-def _stable_scan_task(container: Container) -> TaskHandler:
-    """Учащённый проход по стабильным токенам.
-
-    Отдельный проход нужен потому, что стоимость круга между стабильными
-    токенами почти нулевая, и прибыльным становится любое заметное
-    отклонение от паритета — но живёт оно минуты, и обычный цикл его не
-    застаёт.
-
-    Проход выполняет тот же Level 1 с суженным scope: второй реализации
-    сканера не создаётся.
-    """
-
-    async def run() -> None:
-        if not container.control.is_running:
-            return
-        # Пустой результат означает, что ни в одной сети нечего проверять:
-        # нет стабильных токенов или ни один провайдер не участвует.
-        await container.level1.scan_stable_all()
 
     return run
 

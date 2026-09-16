@@ -13,12 +13,12 @@ Gas не игнорируется ради скорости (``02_LEVEL1_SCANNER
 from __future__ import annotations
 
 from monik.config.sections.profitability import ProfitabilityConfig
+from monik.domain.enums.modes import ScanMode
 from monik.domain.models.conversion import ConversionRate
 from monik.domain.models.fee import Fee
 from monik.domain.models.gas import Gas
 from monik.domain.models.profit import ProfitCalculationInput, ProfitResult
 from monik.domain.models.quote import Quote
-from monik.domain.models.token import TokenKey
 from monik.services.calculator.profit import ProfitCalculator
 from monik.services.fees.context import FeeContext
 from monik.services.level1.ports import FeeSource, GasSource, RateSource
@@ -51,8 +51,12 @@ class PreliminaryEvaluator:
         self._networks = networks
         self._profitability = profitability
 
-    async def evaluate(self, buy_quote: Quote, sell_quote: Quote) -> ProfitResult:
-        """Предварительный результат для одной суммы."""
+    async def evaluate(self, buy_quote: Quote, sell_quote: Quote, mode: ScanMode) -> ProfitResult:
+        """Предварительный результат для одной суммы.
+
+        Планка берётся у режима прохода: тот же порог применит и Level 2,
+        когда будет подтверждать найденное.
+        """
         fees = await self._collect_fees(buy_quote, sell_quote)
         gas = await self._gas.estimate(
             buy_quote.network_id,
@@ -76,21 +80,10 @@ class PreliminaryEvaluator:
                 fees=fees,
                 gas=gas,
                 conversion_rates=() if gas_rate is None else (gas_rate,),
-                threshold=self._profitability.threshold_for(
-                    stable=self._is_stable(buy_quote.output_token), final=False
-                ),
+                threshold=self._profitability.threshold_for(mode),
                 threshold_metric=self._profitability.threshold_metric,
             )
         )
-
-    def _is_stable(self, token: TokenKey) -> bool:
-        """Помечен ли промежуточный токен как стабильный.
-
-        Круг определяется промежуточным токеном: базовый и без того
-        стабилен, иначе стабильных пар не существовало бы вовсе.
-        """
-        found = self._tokens.get(token)
-        return found is not None and found.usd_stable
 
     async def _collect_fees(self, buy_quote: Quote, sell_quote: Quote) -> tuple[Fee, ...]:
         """Комиссии обеих ног цикла.

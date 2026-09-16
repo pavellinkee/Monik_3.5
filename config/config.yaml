@@ -82,9 +82,7 @@ providers:
     supported_networks: [polygon]
 
   - provider_id: velora
-    # Выключен по решению оператора 15.09: в работе остаётся только
-    # Uniswap. Возврат — одной строкой.
-    enabled: false
+    enabled: true
     emoji: "👾"
     ui_url: "https://app.velora.xyz"
     # Покупка и продажа у этого агрегатора. Разрешение двухуровневое:
@@ -106,9 +104,9 @@ providers:
     schedule:
       start: "07:00"
       end: "19:00"
-    # В учащённом проходе не участвует: при интервале 30 секунд он один
-    # стоил бы 8640 запросов за окно при квоте 5000 в сутки.
-    fast_scan: false
+    # Только основной режим: при интервале fest в 30 секунд Velora одна
+    # стоила бы 8640 запросов за окно при квоте 5000 в сутки.
+    modes: [ur]
     # Только Polygon. API Velora работает и на Arbitrum, но суточная
     # квота бесплатного тарифа — 5000 запросов, а один Polygon уже
     # расходует около 44 за цикл. Вторая сеть удвоила бы расход без
@@ -116,8 +114,9 @@ providers:
     supported_networks: [polygon]
 
   - provider_id: kyberswap
-    # Выключен 16.09: в работе остаётся только Uniswap.
-    enabled: false
+    enabled: true
+    # Только основной режим: в fest оператор оставил один Uniswap.
+    modes: [ur]
     emoji: "🖲️"
     ui_url: "https://kyberswap.com/swap/"
     # Покупка и продажа у этого агрегатора. Разрешение двухуровневое:
@@ -145,6 +144,8 @@ providers:
 
   - provider_id: uniswap
     enabled: true
+    # Участвует в обоих режимах.
+    modes: [ur, fest]
     emoji: "🧩"
     ui_url: "https://app.uniswap.org/swap"
     # Покупка и продажа у этого агрегатора. Разрешение двухуровневое:
@@ -194,24 +195,18 @@ tokens:
     symbol: WETH
     decimals: 18
     rank: 4
-    # Выключен 16.09: в наборе оставлены только стейблкоины.
-    enabled: false
 
   - network_id: polygon
     address: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270"
     symbol: WPOL
     decimals: 18
     rank: 5
-    # Выключен 16.09: в наборе оставлены только стейблкоины.
-    enabled: false
 
   - network_id: polygon
     address: "0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6"
     symbol: WBTC
     decimals: 8
     rank: 6
-    # Выключен 16.09: в наборе оставлены только стейблкоины.
-    enabled: false
 
   - network_id: polygon
     address: "0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063"
@@ -225,48 +220,36 @@ tokens:
     symbol: AAVE
     decimals: 18
     rank: 8
-    # Выключен 16.09: в наборе оставлены только стейблкоины.
-    enabled: false
 
   - network_id: polygon
     address: "0x53E0bca35eC356BD5ddDFebbD1Fc0fD03FaBad39"
     symbol: LINK
     decimals: 18
     rank: 9
-    # Выключен 16.09: в наборе оставлены только стейблкоины.
-    enabled: false
 
   - network_id: polygon
     address: "0xb33EaAd8d922B1083446DC23f610c2567fB5180f"
     symbol: UNI
     decimals: 18
     rank: 10
-    # Выключен 16.09: в наборе оставлены только стейблкоины.
-    enabled: false
 
   - network_id: polygon
     address: "0xc3c7d422809852031b44ab29eec9f1eff2a58756"
     symbol: LDO
     decimals: 18
     rank: 13
-    # Выключен 16.09: в наборе оставлены только стейблкоины.
-    enabled: false
 
   - network_id: polygon
     address: "0x03b54A6e9a984069379fae1a4fC4dBAE93B3bCCD"
     symbol: wstETH
     decimals: 18
     rank: 14
-    # Выключен 16.09: в наборе оставлены только стейблкоины.
-    enabled: false
 
   - network_id: polygon
     address: "0xdf7837de1f2fa4631d716cf2502f8b230f1dcc32"
     symbol: TEL
     decimals: 2
     rank: 27
-    # Выключен 16.09: в наборе оставлены только стейблкоины.
-    enabled: false
 
   - network_id: polygon
     address: "0x3a58a54c066fdc0f2d55fc9c89f0415c92ebf3c4"
@@ -277,16 +260,12 @@ tokens:
   # Добавлены 15.09 по измерению стоимости круга на 1000 USDT: у всех
   # трёх проход через пулы дешевле 0,7 %, что оставляет место расхождению
   # цен между агрегаторами.
-    # Выключен 16.09: в наборе оставлены только стейблкоины.
-    enabled: false
 
   - network_id: polygon
     address: "0xfa68FB4628DFF1028CFEc22b4162FCcd0d45efb6"
     symbol: MaticX
     decimals: 18
     rank: 31
-    # Выключен 16.09: в наборе оставлены только стейблкоины.
-    enabled: false
 
   - network_id: polygon
     # Евро-стейблкоин: относительно USDT он подвижен, поэтому меткой
@@ -311,8 +290,6 @@ tokens:
   # круга не растёт вместе с суммой: WETH на 10000 стоит 0,027 % против
   # 0,066 % на Polygon, WBTC — 0,035 % против 0,102 %. Адреса и знаки
   # сверены вызовом decimals()/symbol() у контрактов сети.
-    # Выключен 16.09: в наборе оставлены только стейблкоины.
-    enabled: false
 
   - network_id: arbitrum
     address: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9"
@@ -349,32 +326,24 @@ tokens:
     symbol: WETH
     decimals: 18
     rank: 5
-    # Выключен 16.09: в наборе оставлены только стейблкоины.
-    enabled: false
 
   - network_id: arbitrum
     address: "0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f"
     symbol: WBTC
     decimals: 8
     rank: 6
-    # Выключен 16.09: в наборе оставлены только стейблкоины.
-    enabled: false
 
   - network_id: arbitrum
     address: "0x912CE59144191C1204E64559FE8253a0e49E6548"
     symbol: ARB
     decimals: 18
     rank: 7
-    # Выключен 16.09: в наборе оставлены только стейблкоины.
-    enabled: false
 
   - network_id: arbitrum
     address: "0xf97f4df75117a78c1A5a0DBb814Af92458539FB4"
     symbol: LINK
     decimals: 18
     rank: 8
-    # Выключен 16.09: в наборе оставлены только стейблкоины.
-    enabled: false
 
 routes:
   # Покупка и продажа у одного агрегатора. Архитектура это допускает при
@@ -394,31 +363,35 @@ scanner:
   # произвольно и на стоимость поиска не влияет.
   amounts: ["50", "100", "300", "500"]
 
+  # Режимы сканирования. Каждый — именованный проход Level 1 со своим
+  # темпом и своей планкой (the_main_rules.md, правило 10). Уровни при
+  # этом не меняются: Level 1 ищет, Level 2 подтверждает.
+  modes:
+    # ur — основной проход: весь набор токенов, все включённые
+    # агрегаторы. Сейчас выключен по решению оператора.
+    ur:
+      enabled: false
+      interval_seconds: 300
+    # fest — частый проход по стейблкоинам. Набор определяется меткой
+    # usd_stable, поэтому EURe в него не входит: он привязан к евро и
+    # интересен расхождением EUR/USD, а не отклонением от паритета.
+    # Состав агрегаторов задан у них самих (providers[].modes).
+    fest:
+      enabled: true
+      interval_seconds: 30
+
   level1:
-    enabled: true
     # Сумма поиска. Level 1 работает одной суммой: остальные Level 2
     # подставляет в уже найденную возможность.
     amount: "50"
-    # Интервал поиска. Таймаут цикла обязан в него укладываться,
-    # иначе циклы накладывались бы по построению, поэтому он
-    # снижен вместе с интервалом.
-    interval_seconds: 30
     overlap_policy: skip
+    # Таймаут прохода. Не может превышать интервал самого частого
+    # включённого режима, иначе проходы накладывались бы по построению.
     scan_timeout_seconds: 25
     top_tokens: 30
     max_opportunities_per_scan: 50
     max_concurrent_requests: 8
     quote_max_age_seconds: 30
-    # Учащённый проход по стабильным токенам. Круг между ними стоит
-    # 0,0013 % против 0,065 % у WETH, поэтому прибыльно любое заметное
-    # отклонение от паритета — но живёт оно минуты. Набор определяется
-    # меткой usd_stable, а не списком имён.
-    # Частый проход по стейблкоинам. Набор определяется меткой
-    # usd_stable, поэтому EURe в него не входит — он привязан к евро и
-    # интересен расхождением EUR/USD, а не отклонением от паритета.
-    stable_scan:
-      enabled: true
-      interval_seconds: 30
     # Срок, в течение которого возможность можно проверять. Поднят до
     # десяти минут, чтобы проверка пережила ручную остановку сканера: при
     # восстановлении просроченное задание отменяется, а не начинается
@@ -440,15 +413,12 @@ scanner:
 
 profitability:
   threshold_metric: net_roi
-  # Порог подтверждения Level 2: возможность должна остаться выгодной на
-  # свежих данных. Сравнение >=, ровно 0.02 % проходит.
-  final_threshold_percent: "0.02"
-  # Порог поиска Level 1: ниже него возможность не создаётся.
-  preliminary_threshold_percent: "0.02"
-  # Отдельный порог для круга между стабильными токенами. Приравнен к
-  # общему: оператор задал единый порог 0,02 %, а прежнее значение
-  # 0,01 % молча применялось бы вместо него ко всем парам, кроме EURe.
-  stable_threshold_percent: "0.02"
+  # Порог каждого режима. Один на оба уровня: Level 1 ищет и Level 2
+  # подтверждает по одной планке (the_main_rules.md, правило 10).
+  # Сравнение >=, ровно указанное значение проходит.
+  thresholds:
+    ur: "0.1"
+    fest: "0.02"
 
 fees:
   enabled: true
@@ -503,11 +473,14 @@ resources:
 scheduler:
   enabled: true
   tasks:
-    level1_scan:
+    # По задаче на режим. Период каждой берётся из scanner.modes и здесь
+    # не дублируется: параметром управляют в одном месте. Указанное здесь
+    # значение, расходящееся с настройкой режима, остановит старт.
+    scan_ur:
       mode: interval
-      # Период задаётся в scanner.level1.interval_seconds и здесь не
-      # дублируется: параметром управляют в одном месте. Указанное здесь
-      # значение, расходящееся с настройкой подсистемы, остановит старт.
+      overlap_policy: skip
+    scan_fest:
+      mode: interval
       overlap_policy: skip
     fee_refresh:
       mode: daily

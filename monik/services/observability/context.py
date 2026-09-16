@@ -32,6 +32,9 @@ class CorrelationContext:
     request_id: str | None = None
     provider: str | None = None
     network: str | None = None
+    #: Режим прохода Level 1. Без него записи двух режимов в журнале
+    #: неотличимы, а настройки одного принимаются за настройки другого.
+    mode: str | None = None
     operation: str | None = None
     #: Пара, к которой относится запрос котировки. Без неё запись об
     #: отказе провайдера не позволяет понять, какая комбинация отвергнута

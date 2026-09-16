@@ -16,6 +16,7 @@ from datetime import timedelta
 
 from monik.config.root import Configuration
 from monik.domain.enums.lifecycle import ScanStatus
+from monik.domain.enums.modes import ScanMode
 from monik.domain.enums.providers import ProviderId
 from monik.domain.models.opportunity import Candidate, Opportunity
 from monik.domain.models.scan import BestCombination, Scan, ScanScope, ScanStatistics
@@ -87,27 +88,15 @@ class Level1Scanner:
         """Сети, подлежащие сканированию в этом такте."""
         return self._scope_builder.scan_networks()
 
-    def scopes(self) -> tuple[ScanScope, ...]:
-        """Границы обычного прохода — по одному scope на сеть.
+    def scopes(self, mode: ScanMode) -> tuple[ScanScope, ...]:
+        """Границы прохода режима — по одному scope на сеть.
 
-        Сеть, у которой сейчас нет ни одного работающего провайдера,
-        пропускается: это решение оператора (часы работы), а не сбой, и
-        пустая запись сканирования по ней не создаётся.
-        """
-        return tuple(
-            self._scope_builder.build(network_id)
-            for network_id in self._scope_builder.scan_networks()
-            if self._scope_builder.active_providers(network_id)
-        )
-
-    def stable_scopes(self) -> tuple[ScanScope, ...]:
-        """Границы учащённого прохода по стабильным токенам каждой сети.
-
-        Сеть, которой нечего проверять, в набор не попадает: решение
-        принимает вызывающая сторона, а пустой цикл не создаётся.
+        Сеть, которой в этом режиме нечего проверять, в набор не
+        попадает: нет работающего провайдера режима или нет подходящих
+        токенов. Пустая запись сканирования по ней не создаётся.
         """
         scopes = (
-            self._scope_builder.build_stable(network_id)
+            self._scope_builder.build(network_id, mode)
             for network_id in self._scope_builder.scan_networks()
         )
         return tuple(scope for scope in scopes if scope is not None)
@@ -123,18 +112,14 @@ class Level1Scanner:
             for network_id in self._scope_builder.scan_networks()
         )
 
-    async def scan_all(self) -> tuple[ScanResult, ...]:
-        """Выполнить обычный цикл в каждой сканируемой сети.
+    async def scan_all(self, mode: ScanMode) -> tuple[ScanResult, ...]:
+        """Выполнить проход режима в каждой сканируемой сети.
 
         Возвращаются только состоявшиеся циклы: сети независимы, и отказ
         узла или провайдера в одной из них не должен отменять поиск в
         остальных.
         """
-        return await self._sweep(self.scopes())
-
-    async def scan_stable_all(self) -> tuple[ScanResult, ...]:
-        """Выполнить учащённый проход по стабильным токенам каждой сети."""
-        return await self._sweep(self.stable_scopes())
+        return await self._sweep(self.scopes(mode))
 
     async def _sweep(self, scopes: tuple[ScanScope, ...]) -> tuple[ScanResult, ...]:
         """Пройти набор scope'ов параллельно.
@@ -255,6 +240,7 @@ class Level1Scanner:
             clock=self._clock,
             scan_id=scan.scan_id,
             network_id=network_id,
+            mode=scope.mode,
             base_token=self._scope_builder.base_token(network_id),
             providers=scope.providers,
             pairs=pairs,
@@ -334,7 +320,7 @@ class Level1Scanner:
         if await guard.is_duplicate(group.fingerprint, now=now):
             return None
         try:
-            opportunity = await handoff.create(group, scan_id=scan.scan_id)
+            opportunity = await handoff.create(group, scan_id=scan.scan_id, mode=scan.scope.mode)
         except Exception as error:  # noqa: BLE001 - ошибка фиксируется и цикл продолжается
             # Неполная Opportunity не должна продолжать workflow (§92).
             _LOGGER.error(
@@ -407,6 +393,7 @@ class Level1Scanner:
                 # Сеть цикла. Сетей в работе может быть несколько, и без
                 # этого поля записи разных сетей в журнале неотличимы:
                 # сеть приходилось бы выводить из адреса лучшего токена.
+                mode=scan.scope.mode.value,
                 network=str(scan.scope.networks[0]),
                 status=status.value,
                 requests=statistics.requests,

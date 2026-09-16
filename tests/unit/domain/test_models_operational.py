@@ -281,7 +281,7 @@ class TestSchedulerTask:
 
     def test_valid_interval_task(self) -> None:
         task = SchedulerTask(
-            task_id="level1_scan",
+            task_id="scan_ur",
             mode=TaskMode.INTERVAL,
             interval=timedelta(minutes=5),
             priority=RequestPriority.LEVEL1_BUY,

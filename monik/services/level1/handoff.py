@@ -14,6 +14,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 from monik.domain.enums.lifecycle import JobStatus, OpportunityStatus
+from monik.domain.enums.modes import ScanMode
 from monik.domain.enums.resources import RequestPriority
 from monik.domain.models.job import Level2Job
 from monik.domain.models.opportunity import Opportunity
@@ -51,12 +52,19 @@ class OpportunityHandoff:
         self._opportunity_ttl = opportunity_ttl
         self._job_ttl = job_ttl
 
-    async def create(self, group: CandidateGroup, *, scan_id: ScanId) -> Opportunity:
-        """Создать Opportunity с Job и немедленно передать его."""
+    async def create(
+        self, group: CandidateGroup, *, scan_id: ScanId, mode: ScanMode
+    ) -> Opportunity:
+        """Создать Opportunity с Job и немедленно передать его.
+
+        Режим сохраняется вместе с возможностью: Level 2 обязан судить её
+        той же планкой, которой она была найдена.
+        """
         now = self._clock.now()
-        opportunity = await self._build(group, scan_id=scan_id, now=now)
+        opportunity = await self._build(group, scan_id=scan_id, mode=mode, now=now)
         job = await self._build_job(opportunity, now=now)
         with log_context(
+            mode=mode.value,
             scan_id=str(scan_id),
             v_id=str(opportunity.v_id),
             k_id=str(job.k_id),
@@ -76,13 +84,14 @@ class OpportunityHandoff:
         return opportunity
 
     async def _build(
-        self, group: CandidateGroup, *, scan_id: ScanId, now: UtcDatetime
+        self, group: CandidateGroup, *, scan_id: ScanId, mode: ScanMode, now: UtcDatetime
     ) -> Opportunity:
         sequence = await self._sequences.next_value(OPPORTUNITY_SEQUENCE)
         return Opportunity(
             opportunity_id=OpportunityId.generate(),
             v_id=VId.from_sequence(sequence),
             scan_id=scan_id,
+            mode=mode,
             status=OpportunityStatus.CREATED,
             buy_provider_id=group.buy_provider_id,
             sell_provider_id=group.sell_provider_id,

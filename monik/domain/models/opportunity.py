@@ -18,6 +18,7 @@ from typing import Any, Self
 from pydantic import Field, model_validator
 
 from monik.domain.enums.lifecycle import OpportunityStatus
+from monik.domain.enums.modes import ScanMode
 from monik.domain.enums.operations import OperationType
 from monik.domain.enums.providers import ProviderId
 from monik.domain.models.base import DomainModel
@@ -201,6 +202,10 @@ class Opportunity(DomainModel):
     opportunity_id: OpportunityId
     v_id: VId
     scan_id: ScanId
+    #: Режим, в котором возможность найдена. Level 2 подтверждает её той
+    #: же планкой, которой она была найдена: иначе проход с мягким
+    #: порогом находил бы то, что проверка со строгим порогом отвергает.
+    mode: ScanMode = ScanMode.UR
     status: OpportunityStatus
     buy_provider_id: ProviderId
     sell_provider_id: ProviderId

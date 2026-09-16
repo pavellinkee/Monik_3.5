@@ -35,6 +35,7 @@ from monik.config.sections import (
     SchedulerConfig,
     TokenConfig,
 )
+from monik.domain.enums.modes import ScanMode
 from monik.domain.enums.providers import ProviderId
 from monik.domain.enums.scheduler import TaskMode
 from monik.domain.value_objects.amounts import TokenAmount
@@ -48,9 +49,17 @@ __all__ = ["Configuration"]
 #: подсистемы. Ключ — идентификатор задачи, значение — откуда берётся
 #: период. Добавление задачи с собственной настройкой — одна строка
 #: здесь; сама настройка остаётся там, где ею управляет оператор.
+def _mode_interval(mode: ScanMode) -> Callable[[Configuration], int]:
+    """Период задачи режима берётся из настроек этого режима."""
+
+    def source(config: Configuration) -> int:
+        return config.scanner.modes.for_mode(mode).interval_seconds
+
+    return source
+
+
 _INTERVAL_SOURCES: dict[str, Callable[[Configuration], int]] = {
-    "level1_scan": lambda config: config.scanner.level1.interval_seconds,
-    "level1_stable_scan": lambda config: config.scanner.level1.stable_scan.interval_seconds,
+    f"scan_{mode.value}": _mode_interval(mode) for mode in ScanMode
 }
 
 

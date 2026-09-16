@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from monik.config.root import Configuration
+from monik.domain.enums.modes import ScanMode
 from monik.domain.enums.providers import ProviderId
 from monik.domain.errors import ConfigurationError
 from monik.domain.models.provider import Provider
@@ -49,10 +50,10 @@ class ProviderRegistry:
         self._network_ui_urls = {
             provider.provider_id: dict(provider.ui_urls) for provider in configuration.providers
         }
-        #: Участвует ли провайдер в учащённом проходе. Ограничение
-        #: принадлежит провайдеру: суточную квоту расходует именно он.
-        self._fast_scan = {
-            provider.provider_id: provider.fast_scan for provider in configuration.providers
+        #: Режимы, в которых участвует провайдер. Ограничение принадлежит
+        #: провайдеру: суточную квоту расходует именно он.
+        self._modes = {
+            provider.provider_id: frozenset(provider.modes) for provider in configuration.providers
         }
         # Часы работы — особенность конкретного провайдера, поэтому она
         # описана у него в конфигурации и превращается здесь в общее
@@ -103,9 +104,9 @@ class ProviderRegistry:
                 return specific
         return self._presentation.get(provider_id, (None, None))[1]
 
-    def participates_in_fast_scan(self, provider_id: ProviderId) -> bool:
-        """Опрашивается ли провайдер в учащённом проходе."""
-        return self._fast_scan.get(provider_id, True)
+    def participates_in(self, provider_id: ProviderId, mode: ScanMode) -> bool:
+        """Опрашивается ли провайдер в этом режиме."""
+        return mode in self._modes.get(provider_id, frozenset(ScanMode))
 
     def window(self, provider_id: ProviderId) -> DailyWindow | None:
         """Окно работы провайдера, если оно задано."""

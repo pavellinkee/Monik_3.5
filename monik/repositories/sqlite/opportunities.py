@@ -5,6 +5,7 @@ from __future__ import annotations
 import aiosqlite
 
 from monik.domain.enums.lifecycle import OpportunityStatus
+from monik.domain.enums.modes import ScanMode
 from monik.domain.enums.providers import ProviderId
 from monik.domain.errors import DatabaseError
 from monik.domain.models.job import Level2Job
@@ -28,7 +29,7 @@ from monik.repositories.sqlite.mapping import column, dump_model, load_model, op
 __all__ = ["SqliteOpportunityRepository"]
 
 _COLUMNS = (
-    "opportunity_id, v_id, scan_id, status, fingerprint, network_id, input_token, "
+    "opportunity_id, v_id, scan_id, mode, status, fingerprint, network_id, input_token, "
     "intermediate_token, output_token, buy_provider_id, sell_provider_id, "
     "buy_route_json, sell_route_json, buy_route_fingerprint, sell_route_fingerprint, "
     "detected_at, expires_at, updated_at, confirmed_at, formula_version"
@@ -143,11 +144,12 @@ class SqliteOpportunityRepository:
         routes = opportunity.routes
         await tx.execute(
             f"INSERT INTO opportunities ({_COLUMNS}) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 str(opportunity.opportunity_id),
                 str(opportunity.v_id),
                 str(opportunity.scan_id),
+                opportunity.mode.value,
                 opportunity.status.value,
                 str(opportunity.fingerprint),
                 str(opportunity.network_id),
@@ -206,6 +208,7 @@ class SqliteOpportunityRepository:
             opportunity_id=opportunity_id,
             v_id=VId(str(column(row, "v_id"))),
             scan_id=ScanId(str(scan_id)),
+            mode=ScanMode(str(column(row, "mode"))),
             status=OpportunityStatus(str(column(row, "status"))),
             buy_provider_id=ProviderId(str(column(row, "buy_provider_id"))),
             sell_provider_id=ProviderId(str(column(row, "sell_provider_id"))),

@@ -7,6 +7,7 @@ from typing import Self
 from pydantic import Field, model_validator
 
 from monik.domain.enums.lifecycle import ScanStatus
+from monik.domain.enums.modes import ScanMode
 from monik.domain.enums.providers import ProviderId
 from monik.domain.models.base import DomainModel
 from monik.domain.models.token import TokenKey
@@ -25,6 +26,10 @@ class ScanScope(DomainModel):
     со следующего цикла (``02_LEVEL1_SCANNER.md`` §69).
     """
 
+    #: Режим прохода. Записывается в scope, а не выводится из состава
+    #: токенов: по набору нельзя отличить частый проход по стейблкоинам
+    #: от основного, если в основном остались только они.
+    mode: ScanMode = ScanMode.UR
     networks: tuple[NetworkId, ...] = Field(min_length=1)
     providers: tuple[ProviderId, ...] = Field(min_length=1)
     tokens: tuple[TokenKey, ...] = Field(min_length=1)

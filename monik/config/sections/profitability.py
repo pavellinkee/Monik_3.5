@@ -5,10 +5,11 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Self
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 
 from monik.config.base import ConfigSection
 from monik.domain.enums.calculation import ThresholdMetric
+from monik.domain.enums.modes import ScanMode
 from monik.domain.value_objects.numeric import SignedDecimal
 
 __all__ = ["ProfitabilityConfig"]
@@ -27,31 +28,26 @@ class ProfitabilityConfig(ConfigSection):
     """
 
     threshold_metric: ThresholdMetric = ThresholdMetric.NET_ROI
-    final_threshold_percent: SignedDecimal = Decimal("1.00")
-    preliminary_threshold_percent: SignedDecimal = Decimal("1.00")
-    #: Отдельный порог для круга между стабильными токенами.
+    #: Порог доходности каждого режима сканирования.
     #:
-    #: Стоимость такого круга почти нулевая — по измерению 0,0013 %
-    #: против 0,065 % у WETH, — поэтому общий порог отсекал бы ровно те
-    #: отклонения от паритета, ради которых стабильные пары и
-    #: опрашиваются часто. Порог принадлежит классу токенов, а не
-    #: конкретному имени: он применяется к любой паре, помеченной
-    #: ``usd_stable``.
+    #: Порог **один на оба уровня**: Level 1 ищет и Level 2 подтверждает
+    #: по одной планке. Две отдельные настройки означали бы, что Level 1
+    #: находит возможность, которую Level 2 заведомо отвергнет, а работа
+    #: обоих уровней тратится впустую; путаница между ними уже дважды
+    #: приводила к неверно понятой конфигурации
+    #: (``the_main_rules.md``, правило 10).
     #:
-    #: ``None`` — отдельного порога нет, действует общий.
-    stable_threshold_percent: SignedDecimal | None = None
+    #: Порог принадлежит режиму, а не классу токенов: частый проход по
+    #: стейблкоинам судится своей планкой просто потому, что это другой
+    #: режим.
+    thresholds: dict[ScanMode, SignedDecimal] = Field(
+        default_factory=lambda: {ScanMode.UR: Decimal("1.00"), ScanMode.FEST: Decimal("1.00")}
+    )
     treat_unknown_cost_as_blocking: bool = True
 
-    def threshold_for(self, *, stable: bool, final: bool) -> Decimal:
-        """Порог для комбинации: общий или стабильный.
-
-        Один и тот же порог применяется к обоим уровням: иначе Level 1
-        находил бы возможность, которую Level 2 отвергал бы по более
-        строгой планке, и работа обоих уровней расходовалась впустую.
-        """
-        if stable and self.stable_threshold_percent is not None:
-            return self.stable_threshold_percent
-        return self.final_threshold_percent if final else self.preliminary_threshold_percent
+    def threshold_for(self, mode: ScanMode) -> Decimal:
+        """Порог режима. Одна планка и для поиска, и для подтверждения."""
+        return self.thresholds[mode]
 
     @model_validator(mode="after")
     def _validate(self) -> Self:
@@ -65,9 +61,9 @@ class ProfitabilityConfig(ConfigSection):
                 "treat_unknown_cost_as_blocking cannot be disabled: an unknown mandatory "
                 "cost must never be treated as zero"
             )
-        if self.preliminary_threshold_percent > self.final_threshold_percent:
+        missing = [mode.value for mode in ScanMode if mode not in self.thresholds]
+        if missing:
             raise ValueError(
-                "preliminary threshold must not exceed the final threshold; "
-                "otherwise Level 1 would discard opportunities that Level 2 would confirm"
+                f"profitability threshold is not set for scan modes: {', '.join(missing)}"
             )
         return self

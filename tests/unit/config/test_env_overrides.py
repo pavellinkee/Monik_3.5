@@ -9,6 +9,7 @@ import pytest
 
 from monik.config import parse_configuration
 from monik.config.sections import Environment
+from monik.domain.enums.modes import ScanMode
 from monik.domain.errors import ConfigurationError
 
 
@@ -18,9 +19,9 @@ def _load(document: dict[str, Any], env: dict[str, str]) -> Any:
 
 class TestEnvironmentOverrides:
     def test_overrides_nested_value(self, document: dict[str, Any], env: dict[str, str]) -> None:
-        env["MONIK__SCANNER__LEVEL1__INTERVAL_SECONDS"] = "600"
+        env["MONIK__SCANNER__MODES__UR__INTERVAL_SECONDS"] = "600"
         config = _load(document, env)
-        assert config.scanner.level1.interval_seconds == 600
+        assert config.scanner.modes.ur.interval_seconds == 600
 
     def test_environment_wins_over_file(
         self, document: dict[str, Any], env: dict[str, str]
@@ -51,9 +52,15 @@ class TestEnvironmentOverrides:
     def test_decimal_override_is_not_converted_to_float(
         self, document: dict[str, Any], env: dict[str, str]
     ) -> None:
-        """Финансовое значение из env остаётся точным (17 §20)."""
-        env["MONIK__PROFITABILITY__FINAL_THRESHOLD_PERCENT"] = "1.25"
-        threshold = _load(document, env).profitability.final_threshold_percent
+        """Финансовое значение из env остаётся точным (17 §20).
+
+        Порог задаётся каждому режиму: незаданный порог — незаданная
+        политика, а не значение по умолчанию, поэтому оба режима названы
+        явно.
+        """
+        document["profitability"] = {"thresholds": {"ur": "1.00", "fest": "1.00"}}
+        env["MONIK__PROFITABILITY__THRESHOLDS__UR"] = "1.25"
+        threshold = _load(document, env).profitability.threshold_for(ScanMode.UR)
         assert threshold == Decimal("1.25")
         assert isinstance(threshold, Decimal)
 
@@ -68,7 +75,7 @@ class TestEnvironmentOverrides:
     ) -> None:
         env["PATH"] = "/usr/bin"
         env["MONIK_ONEINCH_API_KEY"] = "oneinch-example-key-value"
-        assert _load(document, env).scanner.level1.interval_seconds == 300
+        assert _load(document, env).scanner.modes.ur.interval_seconds == 300
 
     def test_override_into_non_mapping_is_rejected(
         self, document: dict[str, Any], env: dict[str, str]

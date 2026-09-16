@@ -355,7 +355,7 @@ class TestCapabilityRepository:
 class TestSchedulerRepository:
     def _state(self, *, next_run_at: object = None) -> SchedulerTaskState:
         return SchedulerTaskState(
-            task_id="level1_scan",
+            task_id="scan_ur",
             mode=TaskMode.INTERVAL,
             enabled=True,
             schedule={"interval_seconds": 300},
@@ -364,7 +364,7 @@ class TestSchedulerRepository:
 
     async def test_upsert_and_get(self, scheduler: SqliteSchedulerRepository) -> None:
         await scheduler.upsert_task(self._state(), updated_at=f.NOW)
-        loaded = await scheduler.get_task("level1_scan")
+        loaded = await scheduler.get_task("scan_ur")
         assert loaded is not None
         assert loaded.mode is TaskMode.INTERVAL
         assert loaded.schedule == {"interval_seconds": 300}
@@ -378,7 +378,7 @@ class TestSchedulerRepository:
         )
         await database.close()
         await database.connect()
-        loaded = await SqliteSchedulerRepository(database).get_task("level1_scan")
+        loaded = await SqliteSchedulerRepository(database).get_task("scan_ur")
         assert loaded is not None
         assert loaded.next_run_at == f.NOW + timedelta(minutes=5)
 
@@ -389,20 +389,20 @@ class TestSchedulerRepository:
         )
         await scheduler.upsert_task(disabled, updated_at=f.NOW)
         enabled = await scheduler.list_enabled()
-        assert [task.task_id for task in enabled] == ["level1_scan"]
+        assert [task.task_id for task in enabled] == ["scan_ur"]
 
     async def test_executions_are_recorded(self, scheduler: SqliteSchedulerRepository) -> None:
         await scheduler.upsert_task(self._state(), updated_at=f.NOW)
         execution = SchedulerExecution(
             execution_id="e1",
-            task_id="level1_scan",
+            task_id="scan_ur",
             status=TaskExecutionStatus.SUCCESS,
             scheduled_for=f.NOW,
             started_at=f.NOW,
             finished_at=f.NOW + timedelta(seconds=10),
         )
         await scheduler.record_execution(execution)
-        assert await scheduler.last_execution("level1_scan") == execution
+        assert await scheduler.last_execution("scan_ur") == execution
 
     async def test_execution_requires_existing_task(
         self, scheduler: SqliteSchedulerRepository
@@ -422,7 +422,7 @@ class TestSchedulerRepository:
         await scheduler.record_execution(
             SchedulerExecution(
                 execution_id="e1",
-                task_id="level1_scan",
+                task_id="scan_ur",
                 status=TaskExecutionStatus.SUCCESS,
                 scheduled_for=f.NOW,
                 started_at=f.NOW,
@@ -430,7 +430,7 @@ class TestSchedulerRepository:
             )
         )
         assert await scheduler.delete_executions_before(f.NOW + timedelta(days=1)) == 1
-        assert await scheduler.last_execution("level1_scan") is None
+        assert await scheduler.last_execution("scan_ur") is None
 
 
 class TestStateTransitionRepository:
