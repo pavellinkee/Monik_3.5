@@ -115,8 +115,8 @@ providers:
 
   - provider_id: kyberswap
     enabled: true
-    # Только основной режим: в fest оператор оставил один Uniswap.
-    modes: [ur]
+    # Участвует в обоих режимах.
+    modes: [ur, fest]
     emoji: "🖲️"
     ui_url: "https://kyberswap.com/swap/"
     # Покупка и продажа у этого агрегатора. Разрешение двухуровневое:
